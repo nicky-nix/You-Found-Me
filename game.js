@@ -7,10 +7,14 @@ const fogCtx = fogCanvas.getContext("2d");
 const GAME_W = 800;
 const GAME_H = 600;
 
-canvas.width = GAME_W;
-canvas.height = GAME_H;
-fogCanvas.width = GAME_W;
-fogCanvas.height = GAME_H;
+// Dynamic size — updated by resizeGame() to always match the real viewport
+let GAME_W_CURRENT = window.innerWidth || GAME_W;
+let GAME_H_CURRENT = window.innerHeight || GAME_H;
+
+canvas.width = GAME_W_CURRENT;
+canvas.height = GAME_H_CURRENT;
+fogCanvas.width = GAME_W_CURRENT;
+fogCanvas.height = GAME_H_CURRENT;
 
 const joystickZone = document.getElementById("joystick-zone");
 
@@ -36,21 +40,34 @@ function clamp(n, min, max) {
 }
 
 const camera = {
-	x: GAME_W / 2,
-	y: GAME_H / 2,
+	x: GAME_W_CURRENT / 2,
+	y: GAME_H_CURRENT / 2,
 	zoom: 1,
 };
 
-// ─── RESPONSIVE RESIZE (NO TRANSFORMS) ──────────────────────
+// ─── RESPONSIVE RESIZE (FILL VIEWPORT — NO BLACK BARS) ──────
 function resizeGame() {
 	const container = document.getElementById("game-container");
-	const scaleX = window.innerWidth / GAME_W;
-	const scaleY = window.innerHeight / GAME_H;
-	const scale = Math.min(scaleX, scaleY, 1);
-	renderScale = scale || 1;
 
-	container.style.width = Math.max(1, Math.floor(GAME_W * scale)) + "px";
-	container.style.height = Math.max(1, Math.floor(GAME_H * scale)) + "px";
+	// Use the real viewport size as the canvas resolution
+	const W = window.innerWidth;
+	const H = window.innerHeight;
+
+	// Resize both canvases to match the full viewport
+	canvas.width = W;
+	canvas.height = H;
+	fogCanvas.width = W;
+	fogCanvas.height = H;
+
+	// Update the global logical size so all draw calls stay correct
+	GAME_W_CURRENT = W;
+	GAME_H_CURRENT = H;
+
+	// Container fills the whole screen
+	container.style.width = W + "px";
+	container.style.height = H + "px";
+
+	renderScale = 1;
 
 	if (joystickInstance && joystickInstance.destroy) {
 		joystickInstance.destroy();
@@ -91,8 +108,8 @@ function updateCamera() {
 
 	const worldW = map[0].length * TILE_SIZE;
 	const worldH = map.length * TILE_SIZE;
-	const halfW = GAME_W / (2 * camera.zoom);
-	const halfH = GAME_H / (2 * camera.zoom);
+	const halfW = GAME_W_CURRENT / (2 * camera.zoom);
+	const halfH = GAME_H_CURRENT / (2 * camera.zoom);
 
 	const px = player.x + player.width / 2;
 	const py = player.y + player.height / 2;
@@ -107,21 +124,21 @@ function applyCameraTransform(targetCtx) {
 		0,
 		0,
 		camera.zoom,
-		GAME_W / 2 - camera.x * camera.zoom,
-		GAME_H / 2 - camera.y * camera.zoom,
+		GAME_W_CURRENT / 2 - camera.x * camera.zoom,
+		GAME_H_CURRENT / 2 - camera.y * camera.zoom,
 	);
 }
 
 function worldToScreenX(x) {
-	return (x - camera.x) * camera.zoom + GAME_W / 2;
+	return (x - camera.x) * camera.zoom + GAME_W_CURRENT / 2;
 }
 
 function worldToScreenY(y) {
-	return (y - camera.y) * camera.zoom + GAME_H / 2;
+	return (y - camera.y) * camera.zoom + GAME_H_CURRENT / 2;
 }
 
 function draw() {
-	ctx.clearRect(0, 0, GAME_W, GAME_H);
+	ctx.clearRect(0, 0, GAME_W_CURRENT, GAME_H_CURRENT);
 
 	if (gameState === "intro") {
 		drawIntro();
@@ -294,16 +311,16 @@ function drawPlayer() {
 
 // ─── FOG ─────────────────────────────────────────────────────
 function drawFog() {
-	fogCtx.clearRect(0, 0, GAME_W, GAME_H);
+	fogCtx.clearRect(0, 0, GAME_W_CURRENT, GAME_H_CURRENT);
 	fogCtx.fillStyle = "rgba(0, 0, 0, 0.68)";
-	fogCtx.fillRect(0, 0, GAME_W, GAME_H);
+	fogCtx.fillRect(0, 0, GAME_W_CURRENT, GAME_H_CURRENT);
 
-	const sunrise = fogCtx.createLinearGradient(0, 0, 0, GAME_H);
+	const sunrise = fogCtx.createLinearGradient(0, 0, 0, GAME_H_CURRENT);
 	sunrise.addColorStop(0, "rgba(255, 190, 120, 0.10)");
 	sunrise.addColorStop(0.55, "rgba(255, 220, 170, 0.00)");
 	sunrise.addColorStop(1, "rgba(210, 230, 255, 0.06)");
 	fogCtx.fillStyle = sunrise;
-	fogCtx.fillRect(0, 0, GAME_W, GAME_H);
+	fogCtx.fillRect(0, 0, GAME_W_CURRENT, GAME_H_CURRENT);
 
 	const cx = worldToScreenX(player.x + player.width / 2);
 	const cy = worldToScreenY(player.y + player.height / 2);
@@ -334,12 +351,19 @@ function drawHUD() {
 	const coords = getGameCoords();
 
 	fogCtx.fillStyle = "rgba(0,0,0,0.7)";
-	roundRect(fogCtx, GAME_W - uiPx(168), uiPx(10), uiPx(158), uiPx(44), uiPx(6));
+	roundRect(
+		fogCtx,
+		GAME_W_CURRENT - uiPx(168),
+		uiPx(10),
+		uiPx(158),
+		uiPx(44),
+		uiPx(6),
+	);
 
 	fogCtx.font = `${uiPx(10)}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#ffd700";
-	fogCtx.fillText(`X: ${coords.x}`, GAME_W - uiPx(152), uiPx(29));
-	fogCtx.fillText(`Z: ${coords.z}`, GAME_W - uiPx(152), uiPx(47));
+	fogCtx.fillText(`X: ${coords.x}`, GAME_W_CURRENT - uiPx(152), uiPx(29));
+	fogCtx.fillText(`Z: ${coords.z}`, GAME_W_CURRENT - uiPx(152), uiPx(47));
 
 	if (player.hasWings) {
 		fogCtx.fillStyle = "rgba(255,255,255,0.15)";
@@ -372,8 +396,8 @@ function drawNotification() {
 	roundRect(
 		fogCtx,
 		uiPx(20),
-		GAME_H - uiPx(80),
-		GAME_W - uiPx(40),
+		GAME_H_CURRENT - uiPx(80),
+		GAME_W_CURRENT - uiPx(40),
 		uiPx(30),
 		uiPx(6),
 	);
@@ -381,7 +405,7 @@ function drawNotification() {
 	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#fff8dc";
 	fogCtx.textAlign = "center";
-	fogCtx.fillText(notification, GAME_W / 2, GAME_H - uiPx(59));
+	fogCtx.fillText(notification, GAME_W_CURRENT / 2, GAME_H_CURRENT - uiPx(59));
 	fogCtx.textAlign = "left";
 	fogCtx.globalAlpha = 1;
 
@@ -417,7 +441,7 @@ let lineStartTime = Date.now();
 
 function drawIntro() {
 	ctx.fillStyle = "#050508";
-	ctx.fillRect(0, 0, GAME_W, GAME_H);
+	ctx.fillRect(0, 0, GAME_W_CURRENT, GAME_H_CURRENT);
 
 	const lines = introLines[introStep].split("\n");
 	ctx.textAlign = "center";
@@ -432,7 +456,11 @@ function drawIntro() {
 	lines.forEach((line, i) => {
 		ctx.font = `${fontPx}px "Press Start 2P"`;
 		ctx.fillStyle = i === lines.length - 1 ? "#ffd700" : "#e8e4d4";
-		ctx.fillText(line, GAME_W / 2, GAME_H / 2 - topOffset + i * lineStep);
+		ctx.fillText(
+			line,
+			GAME_W_CURRENT / 2,
+			GAME_H_CURRENT / 2 - topOffset + i * lineStep,
+		);
 	});
 
 	ctx.globalAlpha = 1;
@@ -478,7 +506,7 @@ function updateTitle() {
 
 function drawTitleCard() {
 	ctx.fillStyle = "#050508";
-	ctx.fillRect(0, 0, GAME_W, GAME_H);
+	ctx.fillRect(0, 0, GAME_W_CURRENT, GAME_H_CURRENT);
 
 	ctx.save();
 	ctx.textAlign = "center";
@@ -492,7 +520,11 @@ function drawTitleCard() {
 	ctx.shadowBlur = 20;
 	ctx.shadowOffsetX = 0;
 	ctx.shadowOffsetY = 8;
-	ctx.fillText("💌", GAME_W / 2, GAME_H / 2 - uiPx(50) + floatOffset);
+	ctx.fillText(
+		"💌",
+		GAME_W_CURRENT / 2,
+		GAME_H_CURRENT / 2 - uiPx(50) + floatOffset,
+	);
 
 	ctx.shadowBlur = 0;
 	ctx.shadowOffsetY = 0;
@@ -503,16 +535,28 @@ function drawTitleCard() {
 	ctx.shadowColor = "#ffd700";
 	ctx.shadowBlur = 15;
 	ctx.fillStyle = "#ff8c00";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + uiPx(50));
+	ctx.fillText(
+		"YOU FOUND ME",
+		GAME_W_CURRENT / 2,
+		GAME_H_CURRENT / 2 + uiPx(50),
+	);
 
 	ctx.shadowBlur = 0;
 	ctx.fillStyle = "#ffd700";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + uiPx(50));
+	ctx.fillText(
+		"YOU FOUND ME",
+		GAME_W_CURRENT / 2,
+		GAME_H_CURRENT / 2 + uiPx(50),
+	);
 
 	ctx.font = `${uiPx(8)}px "Press Start 2P"`;
 	ctx.globalAlpha = 0.4 + Math.abs(Math.sin(time / 600)) * 0.4;
 	ctx.fillStyle = "#8a7a5c";
-	ctx.fillText("charting island coordinates...", GAME_W / 2, GAME_H - uiPx(60));
+	ctx.fillText(
+		"charting island coordinates...",
+		GAME_W_CURRENT / 2,
+		GAME_H_CURRENT - uiPx(60),
+	);
 
 	ctx.restore();
 }
@@ -621,26 +665,23 @@ function drawMemoryPopup() {
 	const padX = uiPx(20);
 	const padY = uiPx(12);
 	const lineH = uiPx(18);
-	const boxW = GAME_W - uiPx(40);
+	const boxW = GAME_W_CURRENT - uiPx(40);
 	const boxH = lines.length * lineH + padY * 2;
-	const boxX = (GAME_W - boxW) / 2; // centered horizontally
-	const boxY = GAME_H - boxH - uiPx(50);
+	const boxY = GAME_H_CURRENT - boxH - uiPx(50);
 
 	fogCtx.save();
 	fogCtx.globalAlpha = alpha;
 	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
-	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(8));
+	roundRect(fogCtx, padX, boxY, boxW, boxH, uiPx(8));
 	fogCtx.strokeStyle = "#ffd700";
 	fogCtx.lineWidth = uiPx(2);
 	fogCtx.stroke();
 
 	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#fff8dc";
-	fogCtx.textAlign = "center";
 	lines.forEach((line, i) => {
-		fogCtx.fillText(line, GAME_W / 2, boxY + padY + uiPx(12) + i * lineH);
+		fogCtx.fillText(line, padX + uiPx(14), boxY + padY + uiPx(12) + i * lineH);
 	});
-	fogCtx.textAlign = "left";
 	fogCtx.restore();
 }
 
