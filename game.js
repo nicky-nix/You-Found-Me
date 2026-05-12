@@ -4,7 +4,6 @@ const ctx = canvas.getContext("2d");
 const fogCanvas = document.getElementById("fogCanvas");
 const fogCtx = fogCanvas.getContext("2d");
 
-// Internal resolution — this never changes
 const GAME_W = 800;
 const GAME_H = 600;
 
@@ -14,22 +13,18 @@ fogCanvas.width = GAME_W;
 fogCanvas.height = GAME_H;
 
 // ─── RESPONSIVE RESIZE ──────────────────────────────────────
-// Scales the container to fit the screen while keeping aspect ratio
 function resizeGame() {
 	const container = document.getElementById("game-container");
 	const scaleX = window.innerWidth / GAME_W;
 	const scaleY = window.innerHeight / GAME_H;
-	const scale = Math.min(scaleX, scaleY); // fit inside screen
+	const scale = Math.min(scaleX, scaleY);
 	container.style.width = GAME_W * scale + "px";
 	container.style.height = GAME_H * scale + "px";
 }
-
 window.addEventListener("resize", resizeGame);
-resizeGame(); // call once on load
+resizeGame();
 
 // ─── GAME STATE ──────────────────────────────────────────────
-// Possible values: 'intro' | 'title' | 'exploring' | 'digging'
-//                  'envelope_rising' | 'envelope_open' | 'letter'
 let gameState = "intro";
 
 // ─── GAME LOOP ───────────────────────────────────────────────
@@ -44,7 +39,7 @@ function update() {
 	if (gameState === "title") {
 		updateTitle();
 	}
-	if (gameState === "digging") {
+	if (gameState === "digging" || gameState === "destination_reached") {
 		updateParticles();
 	}
 }
@@ -61,54 +56,63 @@ function draw() {
 		return;
 	}
 
-	if (gameState === "exploring" || gameState === "digging") {
+	if (
+		gameState === "exploring" ||
+		gameState === "digging" ||
+		gameState === "destination_reached"
+	) {
 		drawMap();
 		drawWings();
 		drawPlayer();
 		drawParticles();
 		drawFog();
 		drawMemories();
-		drawHUD();
+		// FIX 3: only draw HUD during exploration, not during reveal
+		if (gameState === "exploring") {
+			drawHUD();
+			drawNotification(); // FIX 5: actually render notifications
+		}
 	}
+	// FIX 1: removed drawRevealTitleText() — handled in HTML overlay now
 }
 
-function gameLoop(deltaTime) {
+function gameLoop() {
 	update();
 	draw();
 	requestAnimationFrame(gameLoop);
 }
 
-// 0 = water  1 = grass  2 = tree  3 = flower  4 = path
+// ─── MAP ─────────────────────────────────────────────────────
 const TILE_SIZE = 32;
 
 const map = [
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // Row 0: Deep Sea
-	[0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], // Row 1: North Shore
-	[0, 0, 0, 1, 1, 1, 2, 2, 2, 1, 1, 3, 3, 3, 1, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0], // Row 2: Wildflower Meadow
-	[0, 0, 1, 1, 4, 4, 4, 2, 2, 2, 1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0], // Row 3: Northern Grove
-	[0, 1, 1, 4, 4, 1, 4, 4, 2, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0], // Row 4: Path Split
-	[0, 1, 4, 4, 1, 1, 1, 4, 1, 1, 1, 4, 4, 4, 1, 1, 1, 1, 1, 3, 1, 1, 1, 0, 0], // Row 5: Central Crossroad
-	[0, 1, 4, 1, 1, 3, 1, 4, 4, 4, 4, 4, 1, 4, 4, 1, 1, 1, 3, 3, 3, 1, 1, 0, 0], // Row 6: River Bend (Path Bridge)
-	[0, 1, 4, 1, 3, 3, 1, 1, 1, 1, 1, 1, 0, 1, 4, 4, 1, 1, 1, 3, 1, 1, 1, 0, 0], // Row 7: River Headwaters
-	[0, 1, 4, 4, 1, 1, 1, 2, 2, 1, 1, 0, 0, 1, 1, 4, 4, 1, 1, 1, 1, 1, 0, 0, 0], // Row 8: Whispering Woods West
-	[0, 0, 1, 4, 4, 1, 2, 2, 2, 2, 1, 0, 1, 1, 1, 1, 4, 1, 2, 2, 1, 1, 0, 0, 0], // Row 9: The Core Gate
-	[0, 0, 1, 1, 4, 1, 2, 2, 2, 2, 1, 0, 1, 1, 1, 1, 4, 2, 2, 2, 2, 1, 0, 0, 0], // Row 10: Hidden Clearing Access
-	[0, 0, 0, 1, 4, 4, 1, 2, 2, 1, 1, 0, 1, 1, 1, 4, 4, 2, 3, 3, 2, 1, 0, 0, 0], // Row 11: Lake/Ocean Runoff
-	[0, 0, 0, 1, 1, 4, 4, 1, 1, 1, 1, 0, 1, 1, 4, 4, 1, 2, 3, 3, 2, 1, 0, 0, 0], // Row 12: Secret Garden (East)
-	[0, 0, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 2, 2, 2, 1, 0, 0, 0], // Row 13: Southern Overpass
-	[0, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0], // Row 14: Coastline Trimming
-	[0, 1, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], // Row 15: Destination Peninsula
-	[0, 1, 1, 3, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0], // Row 16: South Shore
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // Row 17: Edge Water
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // Row 18: Padding
+	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+	[0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+	[0, 0, 0, 1, 1, 1, 2, 2, 2, 1, 1, 3, 3, 3, 1, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0],
+	[0, 0, 1, 1, 4, 4, 4, 2, 2, 2, 1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0],
+	[0, 1, 1, 4, 4, 1, 4, 4, 2, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0],
+	[0, 1, 4, 4, 1, 1, 1, 4, 1, 1, 1, 4, 4, 4, 1, 1, 1, 1, 1, 3, 1, 1, 1, 0, 0],
+	[0, 1, 4, 1, 1, 3, 1, 4, 4, 4, 4, 4, 1, 4, 4, 1, 1, 1, 3, 3, 3, 1, 1, 0, 0],
+	[0, 1, 4, 1, 3, 3, 1, 1, 1, 1, 1, 1, 0, 1, 4, 4, 1, 1, 1, 3, 1, 1, 1, 0, 0],
+	[0, 1, 4, 4, 1, 1, 1, 2, 2, 1, 1, 0, 0, 1, 1, 4, 4, 1, 1, 1, 1, 1, 0, 0, 0],
+	[0, 0, 1, 4, 4, 1, 2, 2, 2, 2, 1, 0, 1, 1, 1, 1, 4, 1, 2, 2, 1, 1, 0, 0, 0],
+	[0, 0, 1, 1, 4, 1, 2, 2, 2, 2, 1, 0, 1, 1, 1, 1, 4, 2, 2, 2, 2, 1, 0, 0, 0],
+	[0, 0, 0, 1, 4, 4, 1, 2, 2, 1, 1, 0, 1, 1, 1, 4, 4, 2, 3, 3, 2, 1, 0, 0, 0],
+	[0, 0, 0, 1, 1, 4, 4, 1, 1, 1, 1, 0, 1, 1, 4, 4, 1, 2, 3, 3, 2, 1, 0, 0, 0],
+	[0, 0, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 2, 2, 2, 1, 0, 0, 0],
+	[0, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0],
+	[0, 1, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+	[0, 1, 1, 3, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0],
+	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 ];
 
 const TILE_COLORS = {
-	0: "#1a5c7a", // water
-	1: "#4a7c3f", // grass
-	2: "#2d5a1b", // tree (solid)
-	3: "#6aaa50", // wildflowers
-	4: "#8a7a5c", // dirt path
+	0: "#1a5c7a",
+	1: "#4a7c3f",
+	2: "#2d5a1b",
+	3: "#6aaa50",
+	4: "#8a7a5c",
 };
 
 function drawMap() {
@@ -119,34 +123,29 @@ function drawMap() {
 			ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 		}
 	}
-
-	// Draw subtle destination marker
 	ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
 	ctx.beginPath();
 	ctx.arc(destination.x, destination.y, 6, 0, Math.PI * 2);
 	ctx.fill();
 }
 
+// ─── PLAYER ──────────────────────────────────────────────────
 const player = {
-	x: 96, // starting pixel X
-	y: 64, // starting pixel Y
+	x: 96,
+	y: 64,
 	width: 16,
 	height: 16,
 	speed: 2,
-	color: "#ff69b4", // hot pink placeholder
+	color: "#ff69b4",
 	hasWings: false,
 };
 
 const keys = {};
-
 window.addEventListener("keydown", (e) => {
 	keys[e.key] = true;
-	// Prevent arrow keys from scrolling the page
-	if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+	if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key))
 		e.preventDefault();
-	}
 });
-
 window.addEventListener("keyup", (e) => {
 	keys[e.key] = false;
 });
@@ -160,28 +159,23 @@ function getTileAt(px, py) {
 }
 
 function isSolid(tile) {
-	// Water (0) and trees (2) block movement
-	// If player has wings, NOTHING is solid
 	if (player.hasWings) return false;
 	return tile === 0 || tile === 2;
 }
 
 function updatePlayer() {
-	let dx = 0;
-	let dy = 0;
+	let dx = 0,
+		dy = 0;
 	const spd = player.hasWings ? player.speed * 3 : player.speed;
 
 	if (keys["ArrowUp"] || keys["w"] || keys["W"]) dy -= spd;
 	if (keys["ArrowDown"] || keys["s"] || keys["S"]) dy += spd;
 	if (keys["ArrowLeft"] || keys["a"] || keys["A"]) dx -= spd;
 	if (keys["ArrowRight"] || keys["d"] || keys["D"]) dx += spd;
-	// Add this inside updatePlayer(), after the keyboard dx/dy section:
-	// This blends joystick input with keyboard input
+
 	dx += joyX * spd;
 	dy += joyY * spd;
 
-	// Then the same collision checks below handle both inputs together.
-	// Diagonal speed fix (prevents moving faster diagonally)
 	if (dx !== 0 && dy !== 0) {
 		dx *= 0.707;
 		dy *= 0.707;
@@ -190,7 +184,6 @@ function updatePlayer() {
 	const nextX = player.x + dx;
 	const nextY = player.y + dy;
 
-	// Check 4 corners of player for X movement
 	if (
 		!isSolid(getTileAt(nextX, player.y)) &&
 		!isSolid(getTileAt(nextX + player.width, player.y)) &&
@@ -200,7 +193,6 @@ function updatePlayer() {
 		player.x = nextX;
 	}
 
-	// Check 4 corners for Y movement
 	if (
 		!isSolid(getTileAt(player.x, nextY)) &&
 		!isSolid(getTileAt(player.x + player.width, nextY)) &&
@@ -214,8 +206,6 @@ function updatePlayer() {
 function drawPlayer() {
 	ctx.fillStyle = player.hasWings ? "#ffffff" : player.color;
 	ctx.fillRect(player.x, player.y, player.width, player.height);
-
-	// Glow when wings active
 	if (player.hasWings) {
 		ctx.shadowColor = "#ffd700";
 		ctx.shadowBlur = 12;
@@ -224,56 +214,48 @@ function drawPlayer() {
 	}
 }
 
+// ─── FOG ─────────────────────────────────────────────────────
 function drawFog() {
 	fogCtx.clearRect(0, 0, GAME_W, GAME_H);
-
-	// Step 1: Fill everything with dark fog
 	fogCtx.fillStyle = "rgba(0, 0, 0, 0.73)";
 	fogCtx.fillRect(0, 0, GAME_W, GAME_H);
 
-	// Step 2: Cut a transparent hole around the player
 	const cx = player.x + player.width / 2;
 	const cy = player.y + player.height / 2;
 	const radius = player.hasWings ? 160 : 100;
 
-	// ✅ CORRECTED color stops — transparent in middle, opaque at edge
 	const gradient = fogCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-	gradient.addColorStop(0, "rgba(0, 0, 0, 1)"); // ← will be "erased" = clear
+	gradient.addColorStop(0, "rgba(0, 0, 0, 1)");
 	gradient.addColorStop(0.7, "rgba(0, 0, 0, 0.8)");
-	gradient.addColorStop(1, "rgba(0, 0, 0, 0)"); // ← stays = foggy
+	gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
 
-	// "destination-out" erases the fog where we paint
 	fogCtx.globalCompositeOperation = "destination-out";
 	fogCtx.fillStyle = gradient;
 	fogCtx.beginPath();
 	fogCtx.arc(cx, cy, radius, 0, Math.PI * 2);
 	fogCtx.fill();
-
-	fogCtx.globalCompositeOperation = "source-over"; // reset!
+	fogCtx.globalCompositeOperation = "source-over";
 }
 
+// ─── HUD ─────────────────────────────────────────────────────
 function getGameCoords() {
 	return {
 		x: Math.floor(player.x / TILE_SIZE),
-		z: -Math.floor(player.y / TILE_SIZE), // flip Y → Z like Minecraft
+		z: -Math.floor(player.y / TILE_SIZE),
 	};
 }
 
 function drawHUD() {
 	const coords = getGameCoords();
 
-	// Use fogCtx instead of ctx so it draws ABOVE the fog
-	// Background pill
-	fogCtx.fillStyle = "rgba(0,0,0,0.7)"; // Slightly darker for contrast
+	fogCtx.fillStyle = "rgba(0,0,0,0.7)";
 	roundRect(fogCtx, GAME_W - 168, 10, 158, 44, 6);
 
-	// Coordinate text
 	fogCtx.font = '10px "Press Start 2P"';
 	fogCtx.fillStyle = "#ffd700";
 	fogCtx.fillText(`X: ${coords.x}`, GAME_W - 152, 29);
 	fogCtx.fillText(`Z: ${coords.z}`, GAME_W - 152, 47);
 
-	// Wings indicator
 	if (player.hasWings) {
 		fogCtx.fillStyle = "rgba(255,255,255,0.15)";
 		roundRect(fogCtx, 10, 10, 80, 24, 4);
@@ -282,11 +264,39 @@ function drawHUD() {
 		fogCtx.fillText("🪽 FLYING", 16, 26);
 	}
 
-	// Also call your progress heart here if you want it visible!
 	drawProgressHeart();
 }
 
-// Helper — rounded rectangle (needed in multiple places)
+// FIX 5: notification renderer that was missing
+let notification = null;
+let notifTimer = 0;
+
+function showNotification(msg) {
+	notification = msg;
+	notifTimer = 180;
+}
+
+function drawNotification() {
+	if (!notification || notifTimer <= 0) return;
+	notifTimer--;
+
+	const alpha = Math.min(1, notifTimer / 30);
+	fogCtx.globalAlpha = alpha;
+	fogCtx.fillStyle = "rgba(10,8,5,0.9)";
+	fogCtx.strokeStyle = "#ffd700";
+	fogCtx.lineWidth = 1.5;
+	roundRect(fogCtx, 20, GAME_H - 80, GAME_W - 40, 30, 6);
+	fogCtx.stroke();
+	fogCtx.font = '8px "Press Start 2P"';
+	fogCtx.fillStyle = "#fff8dc";
+	fogCtx.textAlign = "center";
+	fogCtx.fillText(notification, GAME_W / 2, GAME_H - 59);
+	fogCtx.textAlign = "left";
+	fogCtx.globalAlpha = 1;
+
+	if (notifTimer <= 0) notification = null;
+}
+
 function roundRect(ctx, x, y, w, h, r) {
 	ctx.beginPath();
 	ctx.moveTo(x + r, y);
@@ -302,16 +312,17 @@ function roundRect(ctx, x, y, w, h, r) {
 	ctx.fill();
 }
 
+// ─── INTRO ───────────────────────────────────────────────────
 let introStep = 0;
 const introLines = [
-	// Edit these to match your prologue text from the storyline doc
 	"There is a certain kind of lost\nthat has no map.",
 	"Not lost in a place.\nLost in yourself.",
 	"And then she walked back\ninto his life.",
 	"She left a letter.\nAnd inside it — a map.",
-	"X: 150,  Z: -300\n\nIf you ever loved me...\nfind me.",
+	"X: 20,  Z: -15\n\nIf you ever loved me...\nfind me.",
 	"[ tap or press any key\nto set sail ]",
 ];
+let lineStartTime = Date.now();
 
 function drawIntro() {
 	ctx.fillStyle = "#050508";
@@ -320,11 +331,7 @@ function drawIntro() {
 	const lines = introLines[introStep].split("\n");
 	ctx.textAlign = "center";
 
-	// Calculate how long this specific line has been on screen
-	const timeElapsed = Date.now() - lineStartTime;
-	const fadeDuration = 1000; // 1 second fade-in time
-	const alpha = Math.min(1, timeElapsed / fadeDuration); // Fades to 1 and STAYS at 1
-
+	const alpha = Math.min(1, (Date.now() - lineStartTime) / 1000);
 	ctx.globalAlpha = alpha;
 
 	lines.forEach((line, i) => {
@@ -341,13 +348,10 @@ function drawIntro() {
 	ctx.textAlign = "left";
 }
 
-// Advance intro on click OR any keypress
 canvas.addEventListener("click", advanceIntro);
 window.addEventListener("keydown", (e) => {
 	if (gameState === "intro") advanceIntro();
 });
-
-let lineStartTime = Date.now(); // Put this at the top of your script with game states
 
 function advanceIntro() {
 	if (gameState !== "intro") return;
@@ -356,55 +360,78 @@ function advanceIntro() {
 		gameState = "title";
 		introStep = 0;
 	}
-	lineStartTime = Date.now(); // 🔥 Reset the timer for the new line!
+	lineStartTime = Date.now();
 }
 
+// ─── TITLE CARD ──────────────────────────────────────────────
 let titleTimer = 0;
 
 function updateTitle() {
 	titleTimer++;
-	if (titleTimer > 200) {
-		// ~3.3 seconds at 60fps
+	if (titleTimer > 350) {
 		gameState = "exploring";
 		titleTimer = 0;
+		initJoystick();
 	}
 }
 
 function drawTitleCard() {
+	// 1. Deep Midnight Matte Background
 	ctx.fillStyle = "#050508";
 	ctx.fillRect(0, 0, GAME_W, GAME_H);
 
-	const pulse = 0.85 + Math.sin(Date.now() / 400) * 0.15;
-	ctx.globalAlpha = pulse;
-
+	ctx.save();
 	ctx.textAlign = "center";
-	ctx.font = '20px "Press Start 2P"';
-	ctx.fillStyle = "#ffd700";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 - 10);
 
-	ctx.font = "24px serif";
-	ctx.fillStyle = "#ffffff";
-	ctx.fillText("💌", GAME_W / 2, GAME_H / 2 + 30);
+	// Create synchronized time variables for complex, natural movement
+	const time = Date.now();
+	const floatOffset = Math.cos(time / 350) * 12; // Smooth vertical bobbing
+	const pulseAlpha = 0.82 + Math.sin(time / 400) * 0.18; // Soft breathing pulse
 
-	ctx.globalAlpha = 1;
-	ctx.textAlign = "left";
+	// ─── DRAW FLOATING ENVELOPE ──────────────────────────────
+	ctx.font = "75px serif";
+
+	// Configure rich drop shadows for a pseudo-3D parallax pop
+	ctx.shadowColor = "rgba(255, 105, 180, 0.4)"; // Soft pink shadow aura
+	ctx.shadowBlur = 20;
+	ctx.shadowOffsetX = 0;
+	ctx.shadowOffsetY = 8;
+
+	// Draw envelope floating independently above the text
+	ctx.fillText("💌", GAME_W / 2, GAME_H / 2 - 50 + floatOffset);
+
+	// Reset shadow state so it doesn't muddy up the main typography
+	ctx.shadowBlur = 0;
+	ctx.shadowOffsetY = 0;
+
+	// ─── DRAW GOLDEN AURA TEXT ───────────────────────────────
+	ctx.font = '24px "Press Start 2P"';
+	ctx.globalAlpha = pulseAlpha; // Apply breathing transparency effect
+
+	// Background Layer: The Radiant Outer Glow
+	ctx.shadowColor = "#ffd700";
+	ctx.shadowBlur = 15;
+	ctx.fillStyle = "#ff8c00"; // Warm orange/amber base core for the glow
+	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + 50);
+
+	// Foreground Layer: The Sharp Matte Text Centerpiece
+	ctx.shadowBlur = 0; // Clear blurring
+	ctx.fillStyle = "#ffd700"; // Rich polished gold text face
+	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + 50);
+
+	// ─── RETRO LOADING SUB-LABEL ─────────────────────────────
+	// Adds a cinematic arcade aesthetic while the 3.3-second timer runs
+	ctx.font = '8px "Press Start 2P"';
+	// Slowly oscillates visibility over a long timeline
+	ctx.globalAlpha = 0.4 + Math.abs(Math.sin(time / 600)) * 0.4;
+	ctx.fillStyle = "#8a7a5c"; // Muted parchment bronze
+	ctx.fillText("charting island coordinates...", GAME_W / 2, GAME_H - 60);
+
+	ctx.restore();
 }
 
-const wings = {
-	x: 160, // near spawn — adjust to match your map
-	y: 96,
-	width: 16,
-	height: 16,
-	collected: false,
-};
-
-let notification = null;
-let notifTimer = 0;
-
-function showNotification(msg) {
-	notification = msg;
-	notifTimer = 180;
-}
+// ─── WINGS ───────────────────────────────────────────────────
+const wings = { x: 160, y: 96, width: 16, height: 16, collected: false };
 
 function updateWings() {
 	if (wings.collected) return;
@@ -413,87 +440,57 @@ function updateWings() {
 	if (Math.sqrt(dx * dx + dy * dy) < 20) {
 		wings.collected = true;
 		player.hasWings = true;
-		showNotification("✨ Wings collected! You can fly!");
+		showNotification("Wings collected! You can fly!");
 	}
 }
 
 function drawWings() {
 	if (wings.collected) return;
-
 	const bob = Math.sin(Date.now() / 300) * 3;
-
-	// 1. Save the current canvas state
 	ctx.save();
-
-	// 2. Set the opacity (0.0 = completely invisible, 1.0 = fully solid)
-	ctx.globalAlpha = 1; // 💡 Change this value to adjust the wing's transparency!
-
-	// 3. Draw the wings
 	ctx.font = "18px serif";
 	ctx.fillText("🪽", wings.x, wings.y + bob);
-
-	// 4. Restore the canvas state so other objects don't become transparent
 	ctx.restore();
 }
 
-// Call this in your draw() to show the notification
-function drawNotification() {
-	if (!notification || notifTimer <= 0) return;
-	notifTimer--;
-	const alpha = Math.min(1, notifTimer / 30);
-	ctx.globalAlpha = alpha;
-	ctx.fillStyle = "rgba(0,0,0,0.75)";
-	roundRect(ctx, GAME_W / 2 - 180, GAME_H - 70, 360, 40, 6);
-	ctx.font = '8px "Press Start 2P"';
-	ctx.fillStyle = "#ffd700";
-	ctx.textAlign = "center";
-	ctx.fillText(notification, GAME_W / 2, GAME_H - 45);
-	ctx.textAlign = "left";
-	ctx.globalAlpha = 1;
-}
-
-// Positions are in pixels — tune these to match your map layout
+// ─── MEMORIES ────────────────────────────────────────────────
 const memories = [
 	{
-		// Memory 1: Near the northern path fork, right where the journey begins
-		x: 6 * TILE_SIZE + 16, // Column 6 (208px)
-		y: 3 * TILE_SIZE + 16, // Row 3 (112px)
+		x: 6 * TILE_SIZE + 16,
+		y: 3 * TILE_SIZE + 16,
+		collected: false,
 		text: [
 			"This is where I used to sit",
 			"and think about you.",
 			"Every single day.",
 		],
-		collected: false,
 	},
 	{
-		// Memory 2: Right at the central crossroad just before the river crossing
-		x: 12 * TILE_SIZE + 16, // Column 12 (400px)
-		y: 5 * TILE_SIZE + 16, // Row 5 (176px)
+		x: 12 * TILE_SIZE + 16,
+		y: 5 * TILE_SIZE + 16,
+		collected: false,
 		text: [
 			"I found this tree on my first day here.",
 			"I carved something into it.",
 			"I hoped you would find it.",
 		],
-		collected: false,
 	},
 	{
-		// Memory 3: Hidden deep along the quiet western trail loop
-		x: 3 * TILE_SIZE + 16, // Column 3 (112px)
-		y: 11 * TILE_SIZE + 16, // Row 11 (368px)
+		x: 3 * TILE_SIZE + 16,
+		y: 11 * TILE_SIZE + 16,
+		collected: false,
 		text: [
 			"I used to call you at 2am",
 			"just to hear your voice.",
 			"I still do it sometimes.",
 			"I just don't press call anymore.",
 		],
-		collected: false,
 	},
 	{
-		// Memory 4: Placed on the main dirt highway right before the open run to the letter
-		x: 14 * TILE_SIZE + 16, // Column 14 (464px)
-		y: 13 * TILE_SIZE + 16, // Row 13 (432px)
-		text: ["You're close now.", "I can feel it.", "I always could."],
+		x: 14 * TILE_SIZE + 16,
+		y: 13 * TILE_SIZE + 16,
 		collected: false,
+		text: ["You're close now.", "I can feel it.", "I always could."],
 	},
 ];
 
@@ -516,8 +513,6 @@ function updateMemories() {
 }
 
 function drawMemories() {
-	// --- PART A: THE GLOWING DOTS (World Space) ---
-	// Keep these on 'ctx' so they stay on the ground
 	const glow = 4 + Math.sin(Date.now() / 400) * 2;
 	memories.forEach((mem) => {
 		if (mem.collected) return;
@@ -530,26 +525,24 @@ function drawMemories() {
 		ctx.shadowBlur = 0;
 	});
 
-	// --- PART B: THE TEXT BUBBLE (UI Space) ---
 	if (!activeMemory || memoryTimer <= 0) return;
 
 	const alpha = Math.min(1, memoryTimer / 40);
 	const lines = activeMemory;
-	const padX = 20;
-	const padY = 12;
-	const lineH = 18;
+	const padX = 20,
+		padY = 12,
+		lineH = 18;
 	const boxW = GAME_W - 40;
 	const boxH = lines.length * lineH + padY * 2;
 	const boxY = GAME_H - boxH - 50;
 
-	// Use fogCtx here to draw ABOVE the fog!
+	// FIX 8: save/restore so stroke path matches the fill path
+	fogCtx.save();
 	fogCtx.globalAlpha = alpha;
-	fogCtx.fillStyle = "rgba(10,8,5,0.95)"; // Slightly darker for legibility
+	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
+	roundRect(fogCtx, padX, boxY, boxW, boxH, 8);
 	fogCtx.strokeStyle = "#ffd700";
 	fogCtx.lineWidth = 2;
-
-	// Use the fogCtx for the rectangle and text
-	roundRect(fogCtx, padX, boxY, boxW, boxH, 8);
 	fogCtx.stroke();
 
 	fogCtx.font = '8px "Press Start 2P"';
@@ -557,26 +550,25 @@ function drawMemories() {
 	lines.forEach((line, i) => {
 		fogCtx.fillText(line, padX + 14, boxY + padY + 12 + i * lineH);
 	});
-
-	fogCtx.globalAlpha = 1;
+	fogCtx.restore();
 }
 
-// Target in pixel coordinates — tune to match your map
+// ─── DESTINATION ─────────────────────────────────────────────
 const destination = {
-	x: 20 * TILE_SIZE + 16, // Column 20 (656px)
-	y: 15 * TILE_SIZE + 16, // Row 15 (496px)
+	x: 20 * TILE_SIZE + 16,
+	y: 15 * TILE_SIZE + 16,
 };
 
 function checkDestination() {
 	if (gameState !== "exploring") return;
-	const dx = player.x - destination.x;
-	const dy = player.y - destination.y;
-	if (Math.sqrt(dx * dx + dy * dy) < 20) {
+	const c = getGameCoords();
+	if (c.x === 20 && c.z === -15) {
 		gameState = "digging";
 		startRevealSequence();
 	}
 }
 
+// ─── PARTICLES ───────────────────────────────────────────────
 let particles = [];
 
 function spawnParticles(x, y, count = 30) {
@@ -598,7 +590,7 @@ function updateParticles() {
 	particles.forEach((p) => {
 		p.x += p.vx;
 		p.y += p.vy;
-		p.vy += 0.12; // gravity
+		p.vy += 0.12;
 		p.life--;
 	});
 	particles = particles.filter((p) => p.life > 0);
@@ -613,40 +605,88 @@ function drawParticles() {
 	ctx.globalAlpha = 1;
 }
 
+// ─── REVEAL SEQUENCE ─────────────────────────────────────────
+// FIX 1 + 4: proper two-phase reveal — particles → dramatic text → envelope
 function startRevealSequence() {
-	// Spawn digging particles in bursts
+	// 1. Keep the digging block particle bursts running for 2.5 seconds
 	const burstInterval = setInterval(() => {
 		spawnParticles(destination.x, destination.y, 15);
 	}, 300);
 
 	setTimeout(() => {
 		clearInterval(burstInterval);
-		gameState = "envelope_rising";
+
+		// 2. Set state cleanly so the canvas handles drawing the pulsing text over the live map
+		gameState = "destination_reached";
+
+		// 3. Keep the audio transition intact
+		switchToRevealMusic();
+
+		// 4. Bypassed Phase 1 entirely: Show the interactive envelope immediately!
 		showEnvelope();
 	}, 2500);
 }
 
+// FIX 2: envelope renders as emoji correctly, click scoped to envelope only
 function showEnvelope() {
 	const overlay = document.getElementById("ui-overlay");
 	overlay.style.pointerEvents = "all";
 	overlay.innerHTML = `
-    <div id="envelope-container">
-      <div id="envelope">
-        <div id="envelope-heart">💛</div>
+    <div id="envelope-container" style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+    ">
+      <p style="
+          font-family: 'Press Start 2P', monospace;
+          font-size: 16px;
+          color: #ffd700;
+          text-shadow: 0 0 12px #ffd700, 2px 2px #000;
+          letter-spacing: 2px;
+          margin-bottom: 24px;
+          animation: pulse 0.8s ease-in-out infinite alternate;
+      ">YOU FOUND ME</p>
+
+      <div id="envelope" style="cursor: pointer; font-size: 45px; transform: scale(1); transition: transform 0.2s ease;">
+        <div id="envelope-heart">💌</div>
       </div>
-      <p id="envelope-hint">tap to open</p>
+      <p id="envelope-hint" style="
+          font-family: 'Press Start 2P', monospace; 
+          font-size: 8px; 
+          color: #ffffff; 
+          margin-top: 15px; 
+          text-shadow: 2px 2px #000;
+          letter-spacing: 1px;
+      ">[ tap letter to read ]</p>
     </div>
+
+    <style>
+      @keyframes pulse {
+        from { opacity: 0.75; text-shadow: 0 0 8px #ffd700, 2px 2px #000; }
+        to   { opacity: 1;    text-shadow: 0 0 20px #ffd700, 2px 2px #000; }
+      }
+    </style>
   `;
+
+	const env = document.getElementById("envelope");
+	env.addEventListener(
+		"mouseenter",
+		() => (env.style.transform = "scale(1.15)"),
+	);
+	env.addEventListener("mouseleave", () => (env.style.transform = "scale(1)"));
 
 	document
 		.getElementById("envelope-container")
 		.addEventListener("click", () => {
+			if (audio.sealCrack) audio.sealCrack.play().catch(() => {});
 			gameState = "envelope_open";
 			showLetter();
 		});
 }
 
-// ── Edit the letter here ───────────────────────────────────────
+// ─── LETTER ──────────────────────────────────────────────────
 const letterContent = `To my wifey:>,
 
 
@@ -673,55 +713,28 @@ the way I once found you.
 function showLetter() {
 	const overlay = document.getElementById("ui-overlay");
 	overlay.innerHTML = `
-    <div id="letter-container">
-      <div id="parchment">
-        <p id="letter-text"></p>
-        
-        <div id="reply-area" style="display: none; margin-top: 25px; border-top: 1px dashed #8a7a5c; padding-top: 15px;">
-          
-          <div style="margin-bottom: 10px;">
-            <label style="font-family: 'Press Start 2P'; font-size: 7px; color: #8a7a5c; display: block; margin-bottom: 4px;">Your Name:</label>
-            <input type="text" id="reply-name" placeholder="Name..." style="
-              width: 100%; 
-              background: rgba(255, 248, 220, 0.6); 
-              border: 1px solid #8a7a5c; 
-              border-radius: 4px;
-              font-family: 'Press Start 2P', monospace; 
-              font-size: 8px; 
-              padding: 6px; 
-              box-sizing: border-box;
-              color: #2d1e10;
-            " />
-          </div>
-
-          <div>
-            <label style="font-family: 'Press Start 2P'; font-size: 7px; color: #8a7a5c; display: block; margin-bottom: 4px;">Your Reply:</label>
-            <textarea id="reply-input" placeholder="Type your reply here..." style="
-              width: 100%; 
-              height: 70px; 
-              background: rgba(255, 248, 220, 0.6); 
-              border: 1px solid #8a7a5c; 
-              border-radius: 4px;
-              font-family: 'Press Start 2P', monospace; 
-              font-size: 8px; 
-              padding: 8px; 
-              box-sizing: border-box;
-              resize: none;
-              color: #2d1e10;
-            "></textarea>
-          </div>
-
-          <p id="reply-status" style="font-family: 'Press Start 2P'; font-size: 7px; color: #6aaa50; margin-top: 5px; display:none;"></p>
+        <div id="letter-container">
+            <div id="parchment">
+                <p id="letter-text"></p>
+                <div id="reply-area" style="display:none; margin-top:25px; border-top:1px dashed #8a7a5c; padding-top:15px;">
+                    <div style="margin-bottom:10px;">
+                        <label style="font-family:'Press Start 2P';font-size:7px;color:#8a7a5c;display:block;margin-bottom:4px;">Your Name:</label>
+                        <input type="text" id="reply-name" placeholder="Name..." style="width:100%;background:rgba(255,248,220,0.6);border:1px solid #8a7a5c;border-radius:4px;font-family:'Press Start 2P',monospace;font-size:8px;padding:6px;box-sizing:border-box;color:#2d1e10;" />
+                    </div>
+                    <div>
+                        <label style="font-family:'Press Start 2P';font-size:7px;color:#8a7a5c;display:block;margin-bottom:4px;">Your Reply:</label>
+                        <textarea id="reply-input" placeholder="Type your reply here..." style="width:100%;height:70px;background:rgba(255,248,220,0.6);border:1px solid #8a7a5c;border-radius:4px;font-family:'Press Start 2P',monospace;font-size:8px;padding:8px;box-sizing:border-box;resize:none;color:#2d1e10;"></textarea>
+                    </div>
+                    <p id="reply-status" style="font-family:'Press Start 2P';font-size:7px;color:#6aaa50;margin-top:5px;display:none;"></p>
+                </div>
+            </div>
+            <div id="letter-buttons" style="opacity:0">
+                <button id="reply-btn" onclick="toggleReplyBox()">✍️ Reply</button>
+                <button onclick="replayLetter()">💌 Read Again</button>
+                <button onclick="backToIsland()">🏝️ Back to Island</button>
+            </div>
         </div>
-      </div>
-      
-      <div id="letter-buttons" style="opacity:0">
-        <button id="reply-btn" onclick="toggleReplyBox()">✍️ Reply</button>
-        <button onclick="replayLetter()">💌 Read Again</button>
-        <button onclick="backToIsland()">🏝️ Back to Island</button>
-      </div>
-    </div>
-  `;
+    `;
 	gameState = "letter";
 	typewriterEffect(letterContent);
 }
@@ -732,9 +745,8 @@ function typewriterEffect(text) {
 	const interval = setInterval(() => {
 		if (i < text.length) {
 			el.textContent += text[i];
-			// Auto-scroll parchment as text appears
-			const parchment = document.getElementById("parchment");
-			parchment.scrollTop = parchment.scrollHeight;
+			document.getElementById("parchment").scrollTop =
+				document.getElementById("parchment").scrollHeight;
 			i++;
 		} else {
 			clearInterval(interval);
@@ -754,9 +766,8 @@ function toggleReplyBox() {
 	if (replyArea.style.display === "none") {
 		replyArea.style.display = "block";
 		replyBtn.textContent = "🚀 Send Reply";
-
-		const parchment = document.getElementById("parchment");
-		parchment.scrollTop = parchment.scrollHeight;
+		document.getElementById("parchment").scrollTop =
+			document.getElementById("parchment").scrollHeight;
 		nameInput.focus();
 	} else {
 		const nameValue = nameInput.value.trim();
@@ -770,9 +781,6 @@ function toggleReplyBox() {
 				nameInput.focus();
 				return;
 			}
-
-			// 🔒 GATEKEEPER CHECK: Only allows submission if her name is typed
-			// It matches "Hyacinth", "hyacinth", "Hyacinth Baguio", etc.
 			if (!nameValue.toLowerCase().includes("hyacinth")) {
 				statusText.style.display = "block";
 				statusText.style.color = "#ff4444";
@@ -781,7 +789,6 @@ function toggleReplyBox() {
 				nameInput.focus();
 				return;
 			}
-
 			if (msgValue === "") {
 				statusText.style.display = "block";
 				statusText.style.color = "#ff4444";
@@ -789,7 +796,6 @@ function toggleReplyBox() {
 				messageInput.focus();
 				return;
 			}
-
 			sendReplyToDiscord(nameValue, msgValue);
 		} else {
 			replyArea.style.display = "none";
@@ -808,37 +814,18 @@ function sendReplyToDiscord(authorName, replyMessage) {
 	statusText.textContent = "Sending via carrier pigeon... 🕊️";
 	replyBtn.disabled = true;
 
-	// ⚠️ PASTE YOUR ACTUAL DISCORD WEBHOOK URL BETWEEN THE QUOTES BELOW:
 	const discordWebhookUrl =
 		"https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
 
-	// High-visibility Romantic Layout Configuration
 	const payload = {
 		username: "Island Love Letters",
 		avatar_url: "https://i.imgur.com/vHco7O6.png",
 		embeds: [
 			{
-				title: "🌸 A Special Response Has Arrived 🌸",
-
-				// Placed here, her message spans the full width in maximum font size
-				description: `\n${replyMessage}\n\n`,
-
-				color: 16738740, // Hex #ff69b4 (Soft Rose / Hot Pink accent border)
-				thumbnail: {
-					url: "https://i.imgur.com/vHco7O6.png",
-				},
-				fields: [
-					{
-						name: "💖 From Your Wifey",
-						value: `\`\`\`yaml\n${authorName}\n\`\`\``,
-						inline: true,
-					},
-					{
-						name: "⏳ Time Received",
-						value: `<t:${Math.floor(Date.now() / 1000)}:R>`, // Clean countdown style (e.g. "Just now")
-						inline: true,
-					},
-				],
+				description: `> 💖 **From Your Wifey:** \`${authorName}\`\n> ⏳ **Time:** <t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)\n\n🌸 ───────────────────────────── 🌸`,
+				title: `\n${replyMessage}\n`,
+				color: 16738740,
+				thumbnail: { url: "https://i.imgur.com/vHco7O6.png" },
 				footer: {
 					text: "Always Yours • You Found Me Engine",
 					icon_url: "https://i.imgur.com/vHco7O6.png",
@@ -850,18 +837,15 @@ function sendReplyToDiscord(authorName, replyMessage) {
 	fetch(discordWebhookUrl, {
 		method: "POST",
 		mode: "cors",
-		headers: {
-			"Content-Type": "application/json",
-		},
+		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(payload),
 	})
-		.then((response) => {
-			if (response.ok || response.status === 204 || response.status === 200) {
+		.then((res) => {
+			if (res.ok || res.status === 204 || res.status === 200) {
 				statusText.style.color = "#6aaa50";
 				statusText.textContent = "Reply sent securely! ❤️";
 				document.getElementById("reply-name").value = "";
 				document.getElementById("reply-input").value = "";
-
 				setTimeout(() => {
 					document.getElementById("reply-area").style.display = "none";
 					replyBtn.textContent = "✍️ Reply";
@@ -869,14 +853,14 @@ function sendReplyToDiscord(authorName, replyMessage) {
 					statusText.style.display = "none";
 				}, 3000);
 			} else {
-				throw new Error("Response not OK");
+				throw new Error("Not OK");
 			}
 		})
-		.catch((error) => {
+		.catch((err) => {
 			statusText.style.color = "#ff4444";
 			statusText.textContent = "Network error. Try again!";
 			replyBtn.disabled = false;
-			console.error("Webhook Error:", error);
+			console.error("Webhook Error:", err);
 		});
 }
 
@@ -892,46 +876,35 @@ function backToIsland() {
 }
 
 function spawnConfetti() {
-	// Simple CSS confetti — add to overlay
 	const overlay = document.getElementById("ui-overlay");
 	const confetti = document.createElement("div");
 	confetti.id = "confetti";
 	confetti.innerHTML = Array.from(
 		{ length: 40 },
 		() =>
-			`<span style="
-      position:absolute;
-      left:${Math.random() * 100}%;
-      top:-10px;
-      font-size:${14 + Math.random() * 16}px;
-      animation:fall ${1.5 + Math.random() * 2}s ease-in forwards;
-      animation-delay:${Math.random()}s;
-    ">${["💛", "✨", "🌸", "⭐", "💫"][Math.floor(Math.random() * 5)]}</span>`,
+			`<span style="position:absolute;left:${Math.random() * 100}%;top:-10px;font-size:${14 + Math.random() * 16}px;animation:fall ${1.5 + Math.random() * 2}s ease-in forwards;animation-delay:${Math.random()}s;">${["💛", "✨", "🌸", "⭐", "💫"][Math.floor(Math.random() * 5)]}</span>`,
 	).join("");
 	overlay.appendChild(confetti);
 }
 
+// ─── AUDIO ───────────────────────────────────────────────────
 const audio = {
 	explore: new Audio("assets/audio/music-explore.mp3"),
 	reveal: new Audio("assets/audio/music-reveal.mp3"),
 	sealCrack: new Audio("assets/audio/sfx-seal-crack.mp3"),
 	click: new Audio("assets/audio/sfx-click.mp3"),
 };
-
 audio.explore.loop = true;
 audio.explore.volume = 0.4;
 audio.reveal.loop = true;
 audio.reveal.volume = 0.5;
 
 let musicStarted = false;
-
 function startMusic() {
 	if (musicStarted) return;
 	musicStarted = true;
-	audio.explore.play().catch(() => {}); // catch needed — browser may still block
+	audio.explore.play().catch(() => {});
 }
-
-// Trigger music on first interaction
 canvas.addEventListener("click", startMusic, { once: true });
 window.addEventListener("keydown", startMusic, { once: true });
 
@@ -947,16 +920,14 @@ function toggleMute() {
 	Object.values(audio).forEach((a) => (a.muted = isMuted));
 }
 
-// Call switchToRevealMusic() when the envelope appears
-
-let joyX = 0;
-let joyY = 0;
+// ─── JOYSTICK ────────────────────────────────────────────────
+let joyX = 0,
+	joyY = 0;
 let joystickInstance = null;
 
 function initJoystick() {
-	// Only create joystick on touch devices
 	if (!("ontouchstart" in window)) return;
-
+	if (joystickInstance) return;
 	joystickInstance = nipplejs.create({
 		zone: document.getElementById("ui-overlay"),
 		mode: "static",
@@ -964,76 +935,32 @@ function initJoystick() {
 		color: "rgba(255,215,0,0.5)",
 		size: 80,
 	});
-
 	joystickInstance.on("move", (evt, data) => {
 		joyX = data.vector.x;
 		joyY = data.vector.y;
 	});
-
 	joystickInstance.on("end", () => {
 		joyX = 0;
 		joyY = 0;
 	});
 }
 
-// Call initJoystick() after the game starts exploring:
-// In advanceIntro(), at the point where gameState becomes "exploring"
-
-// Then in updatePlayer(), after the keyboard section, add:
-// player.x += joyX * spd;  (with collision check)
-// player.y += joyY * spd;  (with collision check)
-
+// ─── PROGRESS HEART ──────────────────────────────────────────
 function drawProgressHeart() {
 	const dx = player.x - destination.x;
 	const dy = player.y - destination.y;
 	const dist = Math.sqrt(dx * dx + dy * dy);
-	const maxD = 450;
-	const pct = 1 - Math.min(dist / maxD, 1);
+	const pct = 1 - Math.min(dist / 450, 1);
 
 	fogCtx.font = "18px serif";
 	fogCtx.globalAlpha = 0.3;
 	fogCtx.fillText("🤍", 10, 50);
-
 	fogCtx.globalAlpha = pct;
 	fogCtx.fillText("❤️", 10, 50);
 	fogCtx.globalAlpha = 1;
 }
 
-function saveProgress() {
-	try {
-		localStorage.setItem(
-			"yfm-save",
-			JSON.stringify({
-				px: player.x,
-				py: player.y,
-				hasWings: player.hasWings,
-				memories: memories.map((m) => m.collected),
-				wingsCollected: wings.collected,
-			}),
-		);
-	} catch (e) {
-		/* storage unavailable in some browsers */
-	}
-}
-
-function loadProgress() {
-	try {
-		const raw = localStorage.getItem("yfm-save");
-		if (!raw) return;
-		const d = JSON.parse(raw);
-		player.x = d.px;
-		player.y = d.py;
-		player.hasWings = d.hasWings;
-		wings.collected = d.wingsCollected;
-		d.memories.forEach((c, i) => {
-			memories[i].collected = c;
-		});
-	} catch (e) {}
-}
-
-// Call saveProgress() every 5 seconds:
-setInterval(saveProgress, 5000);
-
+// ─── SCREENSHOT ──────────────────────────────────────────────
 function takeScreenshot() {
 	const link = document.createElement("a");
 	link.download = "you-found-me.png";
@@ -1041,4 +968,5 @@ function takeScreenshot() {
 	link.click();
 }
 
+// ─── START ───────────────────────────────────────────────────
 gameLoop();
