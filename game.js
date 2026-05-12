@@ -24,12 +24,19 @@ let joyX = 0,
 	joyY = 0;
 let joystickInstance = null;
 
+let renderScale = 1;
+
+function uiPx(px) {
+	return Math.max(1, Math.round(px / renderScale));
+}
+
 // ─── RESPONSIVE RESIZE (NO TRANSFORMS) ──────────────────────
 function resizeGame() {
 	const container = document.getElementById("game-container");
 	const scaleX = window.innerWidth / GAME_W;
 	const scaleY = window.innerHeight / GAME_H;
 	const scale = Math.min(scaleX, scaleY, 1);
+	renderScale = scale || 1;
 
 	container.style.width = Math.max(1, Math.floor(GAME_W * scale)) + "px";
 	container.style.height = Math.max(1, Math.floor(GAME_H * scale)) + "px";
@@ -268,19 +275,19 @@ function drawHUD() {
 	const coords = getGameCoords();
 
 	fogCtx.fillStyle = "rgba(0,0,0,0.7)";
-	roundRect(fogCtx, GAME_W - 168, 10, 158, 44, 6);
+	roundRect(fogCtx, GAME_W - uiPx(168), uiPx(10), uiPx(158), uiPx(44), uiPx(6));
 
-	fogCtx.font = '10px "Press Start 2P"';
+	fogCtx.font = `${uiPx(10)}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#ffd700";
-	fogCtx.fillText(`X: ${coords.x}`, GAME_W - 152, 29);
-	fogCtx.fillText(`Z: ${coords.z}`, GAME_W - 152, 47);
+	fogCtx.fillText(`X: ${coords.x}`, GAME_W - uiPx(152), uiPx(29));
+	fogCtx.fillText(`Z: ${coords.z}`, GAME_W - uiPx(152), uiPx(47));
 
 	if (player.hasWings) {
 		fogCtx.fillStyle = "rgba(255,255,255,0.15)";
-		roundRect(fogCtx, 10, 10, 80, 24, 4);
-		fogCtx.font = '7px "Press Start 2P"';
+		roundRect(fogCtx, uiPx(10), uiPx(10), uiPx(80), uiPx(24), uiPx(4));
+		fogCtx.font = `${uiPx(7)}px "Press Start 2P"`;
 		fogCtx.fillStyle = "#ffffff";
-		fogCtx.fillText("🪽 FLYING", 16, 26);
+		fogCtx.fillText("🪽 FLYING", uiPx(16), uiPx(26));
 	}
 
 	drawProgressHeart();
@@ -302,13 +309,20 @@ function drawNotification() {
 	fogCtx.globalAlpha = alpha;
 	fogCtx.fillStyle = "rgba(10,8,5,0.9)";
 	fogCtx.strokeStyle = "#ffd700";
-	fogCtx.lineWidth = 1.5;
-	roundRect(fogCtx, 20, GAME_H - 80, GAME_W - 40, 30, 6);
+	fogCtx.lineWidth = uiPx(2);
+	roundRect(
+		fogCtx,
+		uiPx(20),
+		GAME_H - uiPx(80),
+		GAME_W - uiPx(40),
+		uiPx(30),
+		uiPx(6),
+	);
 	fogCtx.stroke();
-	fogCtx.font = '8px "Press Start 2P"';
+	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#fff8dc";
 	fogCtx.textAlign = "center";
-	fogCtx.fillText(notification, GAME_W / 2, GAME_H - 59);
+	fogCtx.fillText(notification, GAME_W / 2, GAME_H - uiPx(59));
 	fogCtx.textAlign = "left";
 	fogCtx.globalAlpha = 1;
 
@@ -352,13 +366,17 @@ function drawIntro() {
 	const alpha = Math.min(1, (Date.now() - lineStartTime) / 1000);
 	ctx.globalAlpha = alpha;
 
+	const fontPx = uiPx(11);
+	const lineStep = uiPx(28);
+	const topOffset = (lines.length - 1) * uiPx(14);
+
 	lines.forEach((line, i) => {
-		ctx.font = '11px "Press Start 2P"';
+		ctx.font = `${fontPx}px "Press Start 2P"`;
 		ctx.fillStyle = i === lines.length - 1 ? "#ffd700" : "#e8e4d4";
 		ctx.fillText(
 			line,
 			GAME_W / 2,
-			GAME_H / 2 - (lines.length - 1) * 14 + i * 28,
+			GAME_H / 2 - topOffset + i * lineStep,
 		);
 	});
 
@@ -410,35 +428,35 @@ function drawTitleCard() {
 	ctx.textAlign = "center";
 
 	const time = Date.now();
-	const floatOffset = Math.cos(time / 350) * 12;
+	const floatOffset = Math.cos(time / 350) * uiPx(12);
 	const pulseAlpha = 0.82 + Math.sin(time / 400) * 0.18;
 
-	ctx.font = "75px serif";
+	ctx.font = `${uiPx(75)}px serif`;
 	ctx.shadowColor = "rgba(255, 105, 180, 0.4)";
 	ctx.shadowBlur = 20;
 	ctx.shadowOffsetX = 0;
 	ctx.shadowOffsetY = 8;
-	ctx.fillText("💌", GAME_W / 2, GAME_H / 2 - 50 + floatOffset);
+	ctx.fillText("💌", GAME_W / 2, GAME_H / 2 - uiPx(50) + floatOffset);
 
 	ctx.shadowBlur = 0;
 	ctx.shadowOffsetY = 0;
 
-	ctx.font = '24px "Press Start 2P"';
+	ctx.font = `${uiPx(24)}px "Press Start 2P"`;
 	ctx.globalAlpha = pulseAlpha;
 
 	ctx.shadowColor = "#ffd700";
 	ctx.shadowBlur = 15;
 	ctx.fillStyle = "#ff8c00";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + 50);
+	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + uiPx(50));
 
 	ctx.shadowBlur = 0;
 	ctx.fillStyle = "#ffd700";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + 50);
+	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + uiPx(50));
 
-	ctx.font = '8px "Press Start 2P"';
+	ctx.font = `${uiPx(8)}px "Press Start 2P"`;
 	ctx.globalAlpha = 0.4 + Math.abs(Math.sin(time / 600)) * 0.4;
 	ctx.fillStyle = "#8a7a5c";
-	ctx.fillText("charting island coordinates...", GAME_W / 2, GAME_H - 60);
+	ctx.fillText("charting island coordinates...", GAME_W / 2, GAME_H - uiPx(60));
 
 	ctx.restore();
 }
@@ -461,7 +479,7 @@ function drawWings() {
 	if (wings.collected) return;
 	const bob = Math.sin(Date.now() / 300) * 3;
 	ctx.save();
-	ctx.font = "18px serif";
+	ctx.font = `${uiPx(18)}px serif`;
 	ctx.fillText("🪽", wings.x, wings.y + bob);
 	ctx.restore();
 }
@@ -542,25 +560,25 @@ function drawMemories() {
 
 	const alpha = Math.min(1, memoryTimer / 40);
 	const lines = activeMemory;
-	const padX = 20,
-		padY = 12,
-		lineH = 18;
-	const boxW = GAME_W - 40;
+	const padX = uiPx(20);
+	const padY = uiPx(12);
+	const lineH = uiPx(18);
+	const boxW = GAME_W - uiPx(40);
 	const boxH = lines.length * lineH + padY * 2;
-	const boxY = GAME_H - boxH - 50;
+	const boxY = GAME_H - boxH - uiPx(50);
 
 	fogCtx.save();
 	fogCtx.globalAlpha = alpha;
 	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
-	roundRect(fogCtx, padX, boxY, boxW, boxH, 8);
+	roundRect(fogCtx, padX, boxY, boxW, boxH, uiPx(8));
 	fogCtx.strokeStyle = "#ffd700";
-	fogCtx.lineWidth = 2;
+	fogCtx.lineWidth = uiPx(2);
 	fogCtx.stroke();
 
-	fogCtx.font = '8px "Press Start 2P"';
+	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#fff8dc";
 	lines.forEach((line, i) => {
-		fogCtx.fillText(line, padX + 14, boxY + padY + 12 + i * lineH);
+		fogCtx.fillText(line, padX + uiPx(14), boxY + padY + uiPx(12) + i * lineH);
 	});
 	fogCtx.restore();
 }
@@ -893,12 +911,18 @@ function spawnConfetti() {
 	const overlay = document.getElementById("ui-overlay");
 	const confetti = document.createElement("div");
 	confetti.id = "confetti";
+	confetti.style.position = "fixed";
+	confetti.style.inset = "0";
+	confetti.style.overflow = "hidden";
+	confetti.style.pointerEvents = "none";
+	confetti.style.zIndex = "9999";
 	confetti.innerHTML = Array.from(
 		{ length: 40 },
 		() =>
 			`<span style="position:absolute;left:${Math.random() * 100}%;top:-10px;font-size:${14 + Math.random() * 16}px;animation:fall ${1.5 + Math.random() * 2}s ease-in forwards;animation-delay:${Math.random()}s;">${["💛", "✨", "🌸", "⭐", "💫"][Math.floor(Math.random() * 5)]}</span>`,
 	).join("");
 	overlay.appendChild(confetti);
+	setTimeout(() => confetti.remove(), 4500);
 }
 
 // ─── AUDIO ───────────────────────────────────────────────────
@@ -973,11 +997,11 @@ function drawProgressHeart() {
 	const dist = Math.sqrt(dx * dx + dy * dy);
 	const pct = 1 - Math.min(dist / 450, 1);
 
-	fogCtx.font = "18px serif";
+	fogCtx.font = `${uiPx(18)}px serif`;
 	fogCtx.globalAlpha = 0.3;
-	fogCtx.fillText("🤍", 10, 50);
+	fogCtx.fillText("🤍", uiPx(10), uiPx(50));
 	fogCtx.globalAlpha = pct;
-	fogCtx.fillText("❤️", 10, 50);
+	fogCtx.fillText("❤️", uiPx(10), uiPx(50));
 	fogCtx.globalAlpha = 1;
 }
 
