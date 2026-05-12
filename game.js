@@ -647,7 +647,7 @@ function showEnvelope() {
 }
 
 // ── Edit the letter here ───────────────────────────────────────
-const letterContent = `To Hyacinth,
+const letterContent = `To my wifey:>,
 
 
 I've been thinking about how to start this
@@ -657,34 +657,9 @@ And every time, I come back to the same truth:
 
 You found me first.
 
-I was lost — really lost —
-the kind of lost that doesn't announce itself.
-I just woke up one day and didn't recognize
-anything around me. Including myself.
+I was lost 
 
-And then there was you.
-
-You didn't fix me. You didn't try to.
-You just... saw me.
-
-Do you know what it did to me —
-to be seen like that?
-
-I went to this island because I needed to know
-if I was worth finding.
-
-And here you are.
-
-One month. It sounds so small.
-But I have lived more in this one month
-than in years before it.
-
-Thank you for the late nights.
-For the silences that never felt empty.
-For finding me — even when I didn't leave
-very good directions.
-
-Daghang salamat, my love.
+Thankyousm my wifey.
 For an amazing month.
 For being my person.
 For finding me —
@@ -693,7 +668,7 @@ the way I once found you.
 
 
                Always yours,
-                    — [Your Name] 💛`;
+                    — iweiwei21`;
 
 function showLetter() {
 	const overlay = document.getElementById("ui-overlay");
@@ -701,8 +676,47 @@ function showLetter() {
     <div id="letter-container">
       <div id="parchment">
         <p id="letter-text"></p>
+        
+        <div id="reply-area" style="display: none; margin-top: 25px; border-top: 1px dashed #8a7a5c; padding-top: 15px;">
+          
+          <div style="margin-bottom: 10px;">
+            <label style="font-family: 'Press Start 2P'; font-size: 7px; color: #8a7a5c; display: block; margin-bottom: 4px;">Your Name:</label>
+            <input type="text" id="reply-name" placeholder="Name..." style="
+              width: 100%; 
+              background: rgba(255, 248, 220, 0.6); 
+              border: 1px solid #8a7a5c; 
+              border-radius: 4px;
+              font-family: 'Press Start 2P', monospace; 
+              font-size: 8px; 
+              padding: 6px; 
+              box-sizing: border-box;
+              color: #2d1e10;
+            " />
+          </div>
+
+          <div>
+            <label style="font-family: 'Press Start 2P'; font-size: 7px; color: #8a7a5c; display: block; margin-bottom: 4px;">Your Reply:</label>
+            <textarea id="reply-input" placeholder="Type your reply here..." style="
+              width: 100%; 
+              height: 70px; 
+              background: rgba(255, 248, 220, 0.6); 
+              border: 1px solid #8a7a5c; 
+              border-radius: 4px;
+              font-family: 'Press Start 2P', monospace; 
+              font-size: 8px; 
+              padding: 8px; 
+              box-sizing: border-box;
+              resize: none;
+              color: #2d1e10;
+            "></textarea>
+          </div>
+
+          <p id="reply-status" style="font-family: 'Press Start 2P'; font-size: 7px; color: #6aaa50; margin-top: 5px; display:none;"></p>
+        </div>
       </div>
+      
       <div id="letter-buttons" style="opacity:0">
+        <button id="reply-btn" onclick="toggleReplyBox()">✍️ Reply</button>
         <button onclick="replayLetter()">💌 Read Again</button>
         <button onclick="backToIsland()">🏝️ Back to Island</button>
       </div>
@@ -727,7 +741,140 @@ function typewriterEffect(text) {
 			document.getElementById("letter-buttons").style.opacity = "1";
 			spawnConfetti();
 		}
-	}, 28);
+	}, 38);
+}
+
+function toggleReplyBox() {
+	const replyArea = document.getElementById("reply-area");
+	const replyBtn = document.getElementById("reply-btn");
+	const nameInput = document.getElementById("reply-name");
+	const messageInput = document.getElementById("reply-input");
+	const statusText = document.getElementById("reply-status");
+
+	if (replyArea.style.display === "none") {
+		replyArea.style.display = "block";
+		replyBtn.textContent = "🚀 Send Reply";
+
+		// Auto-scroll parchment down to show the new inputs
+		const parchment = document.getElementById("parchment");
+		parchment.scrollTop = parchment.scrollHeight;
+		nameInput.focus();
+	} else {
+		const nameValue = nameInput.value.trim();
+		const msgValue = messageInput.value.trim();
+
+		// If they click send, make sure fields aren't blank
+		if (nameValue !== "" || msgValue !== "") {
+			if (nameValue === "") {
+				statusText.style.display = "block";
+				statusText.style.color = "#ff4444";
+				statusText.textContent = "Please enter your name!";
+				nameInput.focus();
+				return;
+			}
+			if (msgValue === "") {
+				statusText.style.display = "block";
+				statusText.style.color = "#ff4444";
+				statusText.textContent = "Please type a message!";
+				messageInput.focus();
+				return;
+			}
+
+			// If both pass validation, fire the webhook
+			sendReplyToDiscord(nameValue, msgValue);
+		} else {
+			// Close cleanly if clicked while completely empty
+			replyArea.style.display = "none";
+			replyBtn.textContent = "✍️ Reply";
+			statusText.style.display = "none";
+		}
+	}
+}
+
+function sendReplyToDiscord(authorName, replyMessage) {
+	const statusText = document.getElementById("reply-status");
+	const replyBtn = document.getElementById("reply-btn");
+
+	statusText.style.display = "block";
+	statusText.style.color = "#ffd700";
+	statusText.textContent = "Sending via carrier pigeon...";
+	replyBtn.disabled = true;
+
+	// ⚠️ PASTE YOUR ACTUAL DISCORD WEBHOOK URL BETWEEN THE QUOTES BELOW:
+	const discordWebhookUrl = "YOUR_DISCORD_WEBHOOK_URL_HERE";
+
+	// Premium Discord Embed Layout Structure
+	const payload = {
+		username: "Island Mailbox",
+		avatar_url: "https://i.imgur.com/K81pX5m.png", // Custom letter icon for the bot profile picture
+		embeds: [
+			{
+				title: "✨ Message Discovered on the Island ✨",
+				color: 16767008, // Hex #ffd700 (Gold accent line)
+				thumbnail: {
+					url: "https://i.imgur.com/K81pX5m.png", // Pixel-art letter icon inside the card
+				},
+				fields: [
+					{
+						name: "👤 Explorer",
+						value: `\`\`\`yaml\n${authorName}\n\`\`\``,
+						inline: true,
+					},
+					{
+						name: "📍 Current Status",
+						value: `\`\`\`fix\nFound & Replied\n\`\`\``,
+						inline: true,
+					},
+					{
+						name: "📝 Written Response",
+						value: `> ${replyMessage.split("\n").join("\n> ")}`, // Blockquote styling for her actual words
+						inline: false,
+					},
+					{
+						name: "📅 Delivered At",
+						value: `<t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)`, // Live dynamic Discord timestamp
+						inline: false,
+					},
+				],
+				footer: {
+					text: "You Found Me • Game Delivery Engine",
+					icon_url: "https://i.imgur.com/K81pX5m.png",
+				},
+			},
+		],
+	};
+
+	fetch(discordWebhookUrl, {
+		method: "POST",
+		mode: "cors",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify(payload),
+	})
+		.then((response) => {
+			if (response.ok || response.status === 204 || response.status === 200) {
+				statusText.style.color = "#6aaa50";
+				statusText.textContent = "Reply sent securely! ❤️";
+				document.getElementById("reply-name").value = "";
+				document.getElementById("reply-input").value = "";
+
+				setTimeout(() => {
+					document.getElementById("reply-area").style.display = "none";
+					replyBtn.textContent = "✍️ Reply";
+					replyBtn.disabled = false;
+					statusText.style.display = "none";
+				}, 3000);
+			} else {
+				throw new Error("Response not OK");
+			}
+		})
+		.catch((error) => {
+			statusText.style.color = "#ff4444";
+			statusText.textContent = "Network error. Try again!";
+			replyBtn.disabled = false;
+			console.error("Webhook Error:", error);
+		});
 }
 
 function replayLetter() {
