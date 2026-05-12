@@ -741,7 +741,7 @@ function typewriterEffect(text) {
 			document.getElementById("letter-buttons").style.opacity = "1";
 			spawnConfetti();
 		}
-	}, 38);
+	}, 28);
 }
 
 function toggleReplyBox() {
@@ -755,7 +755,6 @@ function toggleReplyBox() {
 		replyArea.style.display = "block";
 		replyBtn.textContent = "🚀 Send Reply";
 
-		// Auto-scroll parchment down to show the new inputs
 		const parchment = document.getElementById("parchment");
 		parchment.scrollTop = parchment.scrollHeight;
 		nameInput.focus();
@@ -763,27 +762,36 @@ function toggleReplyBox() {
 		const nameValue = nameInput.value.trim();
 		const msgValue = messageInput.value.trim();
 
-		// If they click send, make sure fields aren't blank
 		if (nameValue !== "" || msgValue !== "") {
 			if (nameValue === "") {
 				statusText.style.display = "block";
 				statusText.style.color = "#ff4444";
-				statusText.textContent = "Please enter your name!";
+				statusText.textContent = "Please enter your name! 🤍";
 				nameInput.focus();
 				return;
 			}
+
+			// 🔒 GATEKEEPER CHECK: Only allows submission if her name is typed
+			// It matches "Hyacinth", "hyacinth", "Hyacinth Baguio", etc.
+			if (!nameValue.toLowerCase().includes("hyacinth")) {
+				statusText.style.display = "block";
+				statusText.style.color = "#ff4444";
+				statusText.textContent =
+					"This mailbox is reserved for my wifey only. Name mo po:>🔒";
+				nameInput.focus();
+				return;
+			}
+
 			if (msgValue === "") {
 				statusText.style.display = "block";
 				statusText.style.color = "#ff4444";
-				statusText.textContent = "Please type a message!";
+				statusText.textContent = "Please type a message! 🌸";
 				messageInput.focus();
 				return;
 			}
 
-			// If both pass validation, fire the webhook
 			sendReplyToDiscord(nameValue, msgValue);
 		} else {
-			// Close cleanly if clicked while completely empty
 			replyArea.style.display = "none";
 			replyBtn.textContent = "✍️ Reply";
 			statusText.style.display = "none";
@@ -797,48 +805,43 @@ function sendReplyToDiscord(authorName, replyMessage) {
 
 	statusText.style.display = "block";
 	statusText.style.color = "#ffd700";
-	statusText.textContent = "Sending via carrier pigeon...";
+	statusText.textContent = "Sending via carrier pigeon... 🕊️";
 	replyBtn.disabled = true;
 
 	// ⚠️ PASTE YOUR ACTUAL DISCORD WEBHOOK URL BETWEEN THE QUOTES BELOW:
-	const discordWebhookUrl = "YOUR_DISCORD_WEBHOOK_URL_HERE";
+	const discordWebhookUrl =
+		"https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
 
-	// Premium Discord Embed Layout Structure
+	// High-visibility Romantic Layout Configuration
 	const payload = {
-		username: "Island Mailbox",
-		avatar_url: "https://i.imgur.com/K81pX5m.png", // Custom letter icon for the bot profile picture
+		username: "Island Love Letters",
+		avatar_url: "https://i.imgur.com/vHco7O6.png",
 		embeds: [
 			{
-				title: "✨ Message Discovered on the Island ✨",
-				color: 16767008, // Hex #ffd700 (Gold accent line)
+				title: "🌸 A Special Response Has Arrived 🌸",
+
+				// Placed here, her message spans the full width in maximum font size
+				description: `\n${replyMessage}\n\n`,
+
+				color: 16738740, // Hex #ff69b4 (Soft Rose / Hot Pink accent border)
 				thumbnail: {
-					url: "https://i.imgur.com/K81pX5m.png", // Pixel-art letter icon inside the card
+					url: "https://i.imgur.com/vHco7O6.png",
 				},
 				fields: [
 					{
-						name: "👤 Explorer",
+						name: "💖 From Your Wifey",
 						value: `\`\`\`yaml\n${authorName}\n\`\`\``,
 						inline: true,
 					},
 					{
-						name: "📍 Current Status",
-						value: `\`\`\`fix\nFound & Replied\n\`\`\``,
+						name: "⏳ Time Received",
+						value: `<t:${Math.floor(Date.now() / 1000)}:R>`, // Clean countdown style (e.g. "Just now")
 						inline: true,
-					},
-					{
-						name: "📝 Written Response",
-						value: `> ${replyMessage.split("\n").join("\n> ")}`, // Blockquote styling for her actual words
-						inline: false,
-					},
-					{
-						name: "📅 Delivered At",
-						value: `<t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)`, // Live dynamic Discord timestamp
-						inline: false,
 					},
 				],
 				footer: {
-					text: "You Found Me • Game Delivery Engine",
-					icon_url: "https://i.imgur.com/K81pX5m.png",
+					text: "Always Yours • You Found Me Engine",
+					icon_url: "https://i.imgur.com/vHco7O6.png",
 				},
 			},
 		],
