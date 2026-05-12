@@ -27,15 +27,27 @@ let joystickInstance = null;
 let renderScale = 1;
 
 function uiPx(px) {
-	return Math.max(1, Math.round(px / renderScale));
+	const downscale = Math.min(renderScale, 1);
+	return Math.max(1, Math.round(px / downscale));
 }
+
+function clamp(n, min, max) {
+	return Math.max(min, Math.min(max, n));
+}
+
+const camera = {
+	x: GAME_W / 2,
+	y: GAME_H / 2,
+	zoom: 1,
+};
 
 // ─── RESPONSIVE RESIZE (NO TRANSFORMS) ──────────────────────
 function resizeGame() {
 	const container = document.getElementById("game-container");
 	const scaleX = window.innerWidth / GAME_W;
 	const scaleY = window.innerHeight / GAME_H;
-	const scale = Math.min(scaleX, scaleY, 1);
+	const useCover = window.innerWidth < 700;
+	const scale = useCover ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY, 1);
 	renderScale = scale || 1;
 
 	container.style.width = Math.max(1, Math.floor(GAME_W * scale)) + "px";
@@ -59,6 +71,7 @@ let gameState = "intro";
 function update() {
 	if (gameState === "exploring") {
 		updatePlayer();
+		updateCamera();
 		updateWings();
 		updateMemories();
 		updateParticles();
@@ -68,8 +81,44 @@ function update() {
 		updateTitle();
 	}
 	if (gameState === "digging" || gameState === "destination_reached") {
+		updateCamera();
 		updateParticles();
 	}
+}
+
+function updateCamera() {
+	const isMobile = window.innerWidth < 700;
+	camera.zoom = isMobile ? 1.7 : 1;
+
+	const worldW = map[0].length * TILE_SIZE;
+	const worldH = map.length * TILE_SIZE;
+	const halfW = GAME_W / (2 * camera.zoom);
+	const halfH = GAME_H / (2 * camera.zoom);
+
+	const px = player.x + player.width / 2;
+	const py = player.y + player.height / 2;
+
+	camera.x = clamp(px, halfW, worldW - halfW);
+	camera.y = clamp(py, halfH, worldH - halfH);
+}
+
+function applyCameraTransform(targetCtx) {
+	targetCtx.setTransform(
+		camera.zoom,
+		0,
+		0,
+		camera.zoom,
+		GAME_W / 2 - camera.x * camera.zoom,
+		GAME_H / 2 - camera.y * camera.zoom,
+	);
+}
+
+function worldToScreenX(x) {
+	return (x - camera.x) * camera.zoom + GAME_W / 2;
+}
+
+function worldToScreenY(y) {
+	return (y - camera.y) * camera.zoom + GAME_H / 2;
 }
 
 function draw() {
@@ -89,12 +138,15 @@ function draw() {
 		gameState === "digging" ||
 		gameState === "destination_reached"
 	) {
+		ctx.save();
+		applyCameraTransform(ctx);
 		drawMap();
 		drawWings();
 		drawPlayer();
 		drawParticles();
-		drawFog();
 		drawMemories();
+		ctx.restore();
+		drawFog();
 		if (gameState === "exploring") {
 			drawHUD();
 			drawNotification();
@@ -243,12 +295,19 @@ function drawPlayer() {
 // ─── FOG ─────────────────────────────────────────────────────
 function drawFog() {
 	fogCtx.clearRect(0, 0, GAME_W, GAME_H);
-	fogCtx.fillStyle = "rgba(0, 0, 0, 0.73)";
+	fogCtx.fillStyle = "rgba(255, 232, 200, 0.65)";
 	fogCtx.fillRect(0, 0, GAME_W, GAME_H);
 
-	const cx = player.x + player.width / 2;
-	const cy = player.y + player.height / 2;
-	const radius = player.hasWings ? 160 : 100;
+	const sunrise = fogCtx.createLinearGradient(0, 0, 0, GAME_H);
+	sunrise.addColorStop(0, "rgba(255, 200, 140, 0.22)");
+	sunrise.addColorStop(0.6, "rgba(255, 232, 200, 0)");
+	sunrise.addColorStop(1, "rgba(240, 250, 255, 0.08)");
+	fogCtx.fillStyle = sunrise;
+	fogCtx.fillRect(0, 0, GAME_W, GAME_H);
+
+	const cx = worldToScreenX(player.x + player.width / 2);
+	const cy = worldToScreenY(player.y + player.height / 2);
+	const radius = player.hasWings ? uiPx(170) : uiPx(120);
 
 	const gradient = fogCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
 	gradient.addColorStop(0, "rgba(0, 0, 0, 1)");
@@ -416,6 +475,7 @@ function updateTitle() {
 	if (titleTimer > 350) {
 		gameState = "exploring";
 		titleTimer = 0;
+		updateCamera();
 		initJoystick(); // This is perfect!
 	}
 }
