@@ -6,6 +6,7 @@ const fogCtx = fogCanvas.getContext("2d");
 
 let GAME_W = window.innerWidth;
 let GAME_H = window.innerHeight;
+let destinationReached = false; // This tracks if the final event already happened
 
 canvas.width = GAME_W;
 canvas.height = GAME_H;
@@ -72,6 +73,8 @@ resizeGame();
 
 // ─── GAME STATE ──────────────────────────────────────────────
 let gameState = "intro";
+let memoryQueue = []; // ─── ADD THIS: Holds waiting memories
+let isDisplayingMemory = false; // ─── ADD THIS: Tracks if a popup is active
 
 // ─── GAME LOOP ───────────────────────────────────────────────
 function update() {
@@ -221,7 +224,7 @@ const player = {
 	width: 16,
 	height: 16,
 	speed: 2,
-	color: "#ff69b4",
+	color: "#293ace",
 	hasWings: false,
 };
 
@@ -462,6 +465,17 @@ window.addEventListener("keydown", (e) => {
 
 function advanceIntro() {
 	if (gameState !== "intro") return;
+
+	// ─── ADD THIS: Play click sound ───
+	audio.click.currentTime = 0;
+	audio.click.play().catch((err) => console.log("Click blocked:", err));
+
+	// FORCE PLAY HERE: Mobile browsers will allow it because this runs
+	// directly inside a user input event listener (click/keydown).
+	if (!musicStarted) {
+		startMusic();
+	}
+
 	introStep++;
 	if (introStep >= introLines.length) {
 		gameState = "title";
@@ -469,7 +483,6 @@ function advanceIntro() {
 	}
 	lineStartTime = Date.now();
 }
-
 // ─── TITLE CARD ──────────────────────────────────────────────
 let titleTimer = 0;
 
@@ -479,7 +492,12 @@ function updateTitle() {
 		gameState = "exploring";
 		titleTimer = 0;
 		updateCamera();
-		initJoystick(); // This is perfect!
+		initJoystick();
+
+		// Double check: Ensure exploration music starts right here!
+		audio.explore
+			.play()
+			.catch((err) => console.log("Explore music failed:", err));
 	}
 }
 
@@ -534,17 +552,32 @@ function updateWings() {
 	if (Math.sqrt(dx * dx + dy * dy) < 20) {
 		wings.collected = true;
 		player.hasWings = true;
-		showNotification("Wings collected! You can fly!");
+
+		// ─── UPDATED: Put the wing notification into the safe message queue ───
+		queueMessage("Wings collected! You can fly!");
 	}
 }
 
 function drawWings() {
 	if (wings.collected) return;
 	const bob = Math.sin(Date.now() / 300) * 3;
-	ctx.save();
+
+	ctx.save(); // 1. Saves current canvas state
+
+	// 2. Force full opacity for the wings asset
+	ctx.globalAlpha = 1.0;
+
+	// 3. Optional: Add a subtle neon magical glow to make them pop in the dark fog
+	ctx.shadowColor = "#fbff00ec";
+	ctx.shadowBlur = 10;
+
 	ctx.font = `${uiPx(18)}px serif`;
-	ctx.fillText("🪽", wings.x, wings.y + bob);
-	ctx.restore();
+
+	// 4. Fill text positions relative to world canvas coordinates
+	ctx.fillStyle = "#ffd900"; // Ensures text color fills fully
+	ctx.fillText("⭐", wings.x, wings.y + bob);
+
+	ctx.restore(); // 5. Restores canvas to pristine settings so it doesn't break other drawings
 }
 
 // ─── MEMORIES ────────────────────────────────────────────────
@@ -598,12 +631,43 @@ function updateMemories() {
 		const dy = player.y - mem.y;
 		if (Math.sqrt(dx * dx + dy * dy) < 24) {
 			mem.collected = true;
-			activeMemory = mem.text;
-			memoryTimer = 280;
+
+			audio.memoryFound.currentTime = 0;
+			audio.memoryFound
+				.play()
+				.catch((err) => console.log("Sound blocked:", err));
+
+			// ─── UPDATED: Send memory text array to the unified queue ───
+			queueMessage(mem.text);
 		}
 	});
-	if (memoryTimer > 0) memoryTimer--;
-	else activeMemory = null;
+
+	if (memoryTimer > 0) {
+		memoryTimer--;
+	} else if (isDisplayingMemory) {
+		// Box timer finished, reset flags and pull next item in line seamlessly
+		activeMemory = null;
+		isDisplayingMemory = false;
+		processNextMemory();
+	}
+}
+
+function queueMessage(messageData) {
+	// If it's a simple string notification, wrap it into an array format
+	if (typeof messageData === "string") {
+		memoryQueue.push([messageData]);
+	} else if (Array.isArray(messageData)) {
+		memoryQueue.push(messageData);
+	}
+	processNextMemory();
+}
+
+function processNextMemory() {
+	if (isDisplayingMemory || memoryQueue.length === 0) return;
+
+	isDisplayingMemory = true;
+	activeMemory = memoryQueue.shift();
+	memoryTimer = 240; // Displays each box for 240 frames (~4 seconds)
 }
 
 function drawMemoryMarkers() {
@@ -658,22 +722,18 @@ const destination = {
 };
 
 function checkDestination() {
-	if (gameState !== "exploring") return;
+	if (gameState !== "exploring" || destinationReached) return;
+	if (isDisplayingMemory || memoryQueue.length > 0) return;
 
 	const c = getGameCoords();
-
-	// Check if player is at the X: 20, Z: -15 spot
 	if (c.x === 20 && c.z === -15) {
 		if (areAllMemoriesCollected()) {
-			// Success: All memories found
+			destinationReached = true;
 			gameState = "digging";
 			startRevealSequence();
 		} else {
-			// Optional: Give a hint if they haven't found everything yet
-			if (notifTimer <= 0) {
-				// Only show if a notification isn't already active
-				showNotification("I should find all the memories first.");
-			}
+			// ─── UPDATED: Pushes the prompt safely into the queue ───
+			queueMessage("I should find all the memories first.");
 		}
 	}
 }
@@ -717,6 +777,9 @@ function drawParticles() {
 
 // ─── REVEAL SEQUENCE ─────────────────────────────────────────
 function startRevealSequence() {
+	// Start fading out the exploration track and fading in the reveal track IMMEDIATELY
+	switchToRevealMusic();
+
 	const burstInterval = setInterval(() => {
 		spawnParticles(destination.x, destination.y, 15);
 	}, 300);
@@ -724,7 +787,7 @@ function startRevealSequence() {
 	setTimeout(() => {
 		clearInterval(burstInterval);
 		gameState = "destination_reached";
-		switchToRevealMusic();
+		// switchToRevealMusic(); // <-- Removed from here so it finishes crossfading exactly now!
 		showEnvelope();
 	}, 2500);
 }
@@ -853,6 +916,15 @@ function showLetter() {
 function typewriterEffect(text) {
 	const el = document.getElementById("letter-text");
 	let i = 0;
+
+	// 1. START SOUND IMMEDIATELY as writing begins
+	if (typeof audio !== "undefined" && audio.typeSound) {
+		audio.typeSound.currentTime = 0;
+		audio.typeSound
+			.play()
+			.catch((err) => console.log("Audio play blocked:", err));
+	}
+
 	const interval = setInterval(() => {
 		if (i < text.length) {
 			el.textContent += text[i];
@@ -861,6 +933,13 @@ function typewriterEffect(text) {
 			i++;
 		} else {
 			clearInterval(interval);
+
+			// 2. STOP SOUND IMMEDIATELY the exact millisecond writing ends
+			if (typeof audio !== "undefined" && audio.typeSound) {
+				audio.typeSound.pause();
+				audio.typeSound.currentTime = 0; // reset for next time
+			}
+
 			document.getElementById("letter-buttons").style.opacity = "1";
 			spawnConfetti();
 		}
@@ -868,6 +947,10 @@ function typewriterEffect(text) {
 }
 
 function toggleReplyBox() {
+	// ─── ADD THIS: Play click sound ───
+	audio.click.currentTime = 0;
+	audio.click.play().catch(() => {});
+
 	const replyArea = document.getElementById("reply-area");
 	const replyBtn = document.getElementById("reply-btn");
 	const nameInput = document.getElementById("reply-name");
@@ -929,7 +1012,7 @@ function sendReplyToDiscord(authorName, replyMessage) {
 		"https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
 
 	const payload = {
-		username: "Island Love Letters",
+		username: "Birb Delivery Island Service",
 		avatar_url: "https://i.imgur.com/vHco7O6.png",
 		embeds: [
 			{
@@ -980,11 +1063,46 @@ function replayLetter() {
 }
 
 function backToIsland() {
+	// ─── ADD THIS: Play click sound ───
+	audio.click.currentTime = 0;
+	audio.click.play().catch(() => {});
+
+	// 1. Switch game states back to exploration immediately
+	gameState = "exploring";
+	setJoystickEnabled(true);
+
+	// 2. Clear UI overlay
 	const overlay = document.getElementById("ui-overlay");
 	overlay.innerHTML = "";
 	overlay.style.pointerEvents = "none";
-	gameState = "exploring";
-	setJoystickEnabled(true);
+
+	// 3. SMOOTH FADE OUT FOR REVEAL MUSIC
+	if (audio.reveal && !audio.reveal.paused) {
+		const fadeDuration = 1000; // 1 second fade out
+		const fadeInterval = 50; // Update every 50ms
+		const steps = fadeDuration / fadeInterval;
+		const volumeStep = audio.reveal.volume / steps;
+
+		const fadeOutReveal = setInterval(() => {
+			if (audio.reveal.volume > volumeStep) {
+				audio.reveal.volume -= volumeStep;
+			} else {
+				// Fade finished: Clean up track completely
+				clearInterval(fadeOutReveal);
+				audio.reveal.pause();
+				audio.reveal.currentTime = 0;
+			}
+		}, fadeInterval);
+	}
+
+	// 4. RESET AND PLAY EXPLORATION MUSIC
+	if (audio.explore) {
+		audio.explore.volume = 1.0; // Bring volume back to max
+		audio.explore.currentTime = 0; // Start the island vibe fresh
+		audio.explore
+			.play()
+			.catch((err) => console.log("Explore music resume failed:", err));
+	}
 }
 
 function spawnConfetti() {
@@ -1007,15 +1125,55 @@ function spawnConfetti() {
 
 // ─── AUDIO ───────────────────────────────────────────────────
 const audio = {
-	explore: new Audio("assets/audio/poopie pack/journey.wav"),
-	reveal: new Audio("assets/audio/poopie pack/blossom.wav"),
-	sealCrack: new Audio("assets/audio/poopie pack/start.wav"),
-	click: new Audio("assets/audio/poopie pack/yeahhhhh yuh.wav"),
+	explore: new Audio("assets/audio/explore.mp3"),
+	reveal: new Audio("assets/audio/reveal.mp3"),
+	sealCrack: new Audio("assets/audio/sealopen.mp3"),
+	memoryFound: new Audio("assets/audio/memory.mp3"),
+	typeSound: new Audio("assets/audio/typing.mp3"),
+	click: {
+		currentTime: 0, // Keeps compatibility with your reset code
+		play: function () {
+			return new Promise((resolve) => {
+				const AudioCtx = window.AudioContext || window.webkitAudioContext;
+				if (!AudioCtx) return resolve();
+
+				const ctx = new AudioCtx();
+				const osc = ctx.createOscillator();
+				const gain = ctx.createGain();
+
+				osc.connect(gain);
+				gain.connect(ctx.destination);
+
+				// 'sine' is soft, 'square' or 'triangle' feels like an old GameBoy
+				osc.type = "triangle";
+
+				// Start high, slide down fast (creates a crisp "pop/click" sensation)
+				osc.frequency.setValueAtTime(800, ctx.currentTime);
+				osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.05);
+
+				// Quick fade out so it doesn't ring
+				gain.gain.setValueAtTime(0.2, ctx.currentTime);
+				gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+
+				osc.start();
+				osc.stop(ctx.currentTime + 0.06);
+				resolve();
+			});
+		},
+	},
 };
 audio.explore.loop = true;
 audio.explore.volume = 0.4;
 audio.reveal.loop = true;
 audio.reveal.volume = 0.5;
+audio.sealCrack.volume = 1;
+audio.typeSound.volume = 0.7;
+audio.memoryFound.volume = 0.5;
+
+if (audio.typeSound) {
+	audio.typeSound.loop = true;
+	audio.typeSound.volume = 0.3;
+}
 
 // --- FIXED AUDIO UNLOCK FOR MOBILE ---
 let musicStarted = false;
@@ -1031,15 +1189,43 @@ window.addEventListener("pointerdown", startMusic, { once: true });
 window.addEventListener("keydown", startMusic, { once: true });
 
 function switchToRevealMusic() {
-	audio.explore.pause();
-	audio.reveal.currentTime = 0;
-	audio.reveal.play().catch(() => {});
-}
+	const fadeDuration = 2500; // Match the 2.5 second delay in startRevealSequence
+	const fadeInterval = 50; // Update volume every 50ms
+	const steps = fadeDuration / fadeInterval;
+	const volumeStep = 1 / steps;
 
-let isMuted = false;
-function toggleMute() {
-	isMuted = !isMuted;
-	Object.values(audio).forEach((a) => (a.muted = isMuted));
+	// 1. Prepare the reveal music silently in the background
+	audio.reveal.volume = 0;
+	audio.reveal.play().catch((err) => console.log("Reveal music blocked:", err));
+
+	let currentStep = 0;
+
+	const crossfade = setInterval(() => {
+		currentStep++;
+
+		// ─── FADE OUT EXPLORE ───
+		if (audio.explore && !audio.explore.paused) {
+			audio.explore.volume = Math.max(0, audio.explore.volume - volumeStep);
+		}
+
+		// ─── FADE IN REVEAL ───
+		if (audio.reveal) {
+			audio.reveal.volume = Math.min(1, audio.reveal.volume + volumeStep);
+		}
+
+		// ─── CLEANUP WHEN FADE IS DONE ───
+		if (currentStep >= steps) {
+			clearInterval(crossfade);
+
+			if (audio.explore) {
+				audio.explore.pause();
+				audio.explore.currentTime = 0; // Reset track position
+			}
+
+			// Lock target volumes perfectly
+			audio.reveal.volume = 1;
+		}
+	}, fadeInterval);
 }
 
 // ─── JOYSTICK ────────────────────────────────────────────────
