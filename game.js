@@ -902,12 +902,19 @@ audio.explore.volume = 0.4;
 audio.reveal.loop = true;
 audio.reveal.volume = 0.5;
 
+// --- FIXED AUDIO UNLOCK FOR MOBILE ---
 let musicStarted = false;
 function startMusic() {
 	if (musicStarted) return;
 	musicStarted = true;
-	audio.explore.play().catch(() => {});
+	audio.explore
+		.play()
+		.catch((err) => console.log("Audio playback blocked:", err));
 }
+
+// Listen for either a desktop click or a mobile tap to kick off the audio context
+canvas.addEventListener("click", startMusic, { once: true });
+canvas.addEventListener("touchstart", startMusic, { once: true });
 // FIX: also trigger music on first touch — mobile requires a user gesture
 canvas.addEventListener("touchend", startMusic, { once: true });
 canvas.addEventListener("click", startMusic, { once: true });
