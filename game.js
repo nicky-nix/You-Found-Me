@@ -224,7 +224,7 @@ const player = {
 	width: 16,
 	height: 16,
 	speed: 2,
-	color: "#293ace",
+	color: "White",
 	hasWings: false,
 };
 
@@ -415,34 +415,67 @@ function roundRect(ctx, x, y, w, h, r) {
 
 // ─── INTRO ───────────────────────────────────────────────────
 let introStep = 0;
-const introLines = [
-	"There is a certain kind of lost\nthat has no map.",
-	"Not lost in a place.\nLost in yourself.",
-	"And then she walked back\ninto his life.",
-	"She left a letter.\nAnd inside it — a map.",
-	"X: 20,  Z: -15\n\nIf you ever loved me...\nfind me.",
-	"[ tap or press any key\nto set sail ]",
-];
+
+const introLines = STORY_INTRO_LINES;
+
 let lineStartTime = Date.now();
 
 function drawIntro() {
 	ctx.fillStyle = "#050508";
 	ctx.fillRect(0, 0, GAME_W, GAME_H);
 
-	const lines = introLines[introStep].split("\n");
+	const fontPx = uiPx(11);
+	ctx.font = `${fontPx}px "Press Start 2P"`;
 	ctx.textAlign = "center";
 
 	const alpha = Math.min(1, (Date.now() - lineStartTime) / 1000);
 	ctx.globalAlpha = alpha;
 
-	const fontPx = uiPx(11);
-	const lineStep = uiPx(28);
-	const topOffset = (lines.length - 1) * uiPx(14);
+	// Split by manual newlines first
+	const structuralLines = introLines[introStep].split("\n");
+	let renderedLines = [];
+	let highlightedLineIndices = new Set(); // Tracks which line index gets the yellow accent
 
-	lines.forEach((line, i) => {
-		ctx.font = `${fontPx}px "Press Start 2P"`;
-		ctx.fillStyle = i === lines.length - 1 ? "#ffd700" : "#e8e4d4";
-		ctx.fillText(line, GAME_W / 2, GAME_H / 2 - topOffset + i * lineStep);
+	// ─── AUTO-WRAP LONG LINES DYNAMICALLY ───
+	const maxTextWidth = GAME_W - uiPx(40); // 20px padding on each side
+
+	structuralLines.forEach((structLine, structIndex) => {
+		const words = structLine.split(" ");
+		let currentLine = "";
+
+		words.forEach((word) => {
+			let testLine = currentLine + (currentLine === "" ? "" : " ") + word;
+			let testWidth = ctx.measureText(testLine).width;
+
+			if (testWidth > maxTextWidth && currentLine !== "") {
+				renderedLines.push(currentLine);
+				// If the original chunk was the last structural string, maintain yellow highlight status
+				if (structIndex === structuralLines.length - 1) {
+					highlightedLineIndices.add(renderedLines.length - 1);
+				}
+				currentLine = word;
+			} else {
+				currentLine = testLine;
+			}
+		});
+
+		if (currentLine !== "") {
+			renderedLines.push(currentLine);
+			if (structIndex === structuralLines.length - 1) {
+				highlightedLineIndices.add(renderedLines.length - 1);
+			}
+		}
+	});
+
+	// ─── RENDER BALANCED LINES TO VERTICAL CENTER ───
+	const lineStep = uiPx(24); // Slightly tighter spacing for multi-line wraps
+	const totalHeight = renderedLines.length * lineStep;
+	const startY = (GAME_H - totalHeight) / 2 + uiPx(12);
+
+	renderedLines.forEach((line, i) => {
+		// Highlight the last original structural line group (e.g. tap prompt / accent lines) in gold
+		ctx.fillStyle = highlightedLineIndices.has(i) ? "#ffd700" : "#e8e4d4";
+		ctx.fillText(line, GAME_W / 2, startY + i * lineStep);
 	});
 
 	ctx.globalAlpha = 1;
@@ -581,45 +614,12 @@ function drawWings() {
 }
 
 // ─── MEMORIES ────────────────────────────────────────────────
-const memories = [
-	{
-		x: 6 * TILE_SIZE + 16,
-		y: 3 * TILE_SIZE + 16,
-		collected: false,
-		text: [
-			"This is where I used to sit",
-			"and think about you.",
-			"Every single day.",
-		],
-	},
-	{
-		x: 12 * TILE_SIZE + 16,
-		y: 5 * TILE_SIZE + 16,
-		collected: false,
-		text: [
-			"I found this tree on my first day here.",
-			"I carved something into it.",
-			"I hoped you would find it.",
-		],
-	},
-	{
-		x: 3 * TILE_SIZE + 16,
-		y: 11 * TILE_SIZE + 16,
-		collected: false,
-		text: [
-			"I used to call you at 2am",
-			"just to hear your voice.",
-			"I still do it sometimes.",
-			"I just don't press call anymore.",
-		],
-	},
-	{
-		x: 14 * TILE_SIZE + 16,
-		y: 13 * TILE_SIZE + 16,
-		collected: false,
-		text: ["You're close now.", "I can feel it.", "I always could."],
-	},
-];
+const memories = STORY_MEMORIES.map((m) => ({
+	x: m.worldX,
+	y: m.worldY,
+	collected: false,
+	text: m.lines,
+}));
 
 let activeMemory = null;
 let memoryTimer = 0;
@@ -732,8 +732,8 @@ function checkDestination() {
 			gameState = "digging";
 			startRevealSequence();
 		} else {
-			// ─── UPDATED: Pushes the prompt safely into the queue ───
-			queueMessage("I should find all the memories first.");
+			// ─── CHANGED: Pass the story asset array cleanly into the unified queue ───
+			queueMessage(STORY_COLLECT_FIRST);
 		}
 	}
 }
@@ -860,28 +860,7 @@ function showEnvelope() {
 }
 
 // ─── LETTER ──────────────────────────────────────────────────
-const letterContent = `To my wifey:>,
-
-
-I've been thinking about how to start this
-for a long time.
-
-And every time, I come back to the same truth:
-
-You found me first.
-
-I was lost 
-
-Thankyousm my wifey.
-For an amazing month.
-For being my person.
-For finding me —
-
-the way I once found you.
-
-
-               Always yours,
-                    — iweiwei21`;
+const letterContent = STORY_LETTER;
 
 function showLetter() {
 	const overlay = document.getElementById("ui-overlay");
