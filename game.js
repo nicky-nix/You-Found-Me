@@ -12,20 +12,35 @@ canvas.height = GAME_H;
 fogCanvas.width = GAME_W;
 fogCanvas.height = GAME_H;
 
-// ─── RESPONSIVE RESIZE WITH TRANSFORMS ──────────────────────
+const joystickZone = document.getElementById("joystick-zone");
+
+function setJoystickEnabled(enabled) {
+	joystickZone.style.pointerEvents = enabled ? "all" : "none";
+}
+
+setJoystickEnabled(false);
+
+let joyX = 0,
+	joyY = 0;
+let joystickInstance = null;
+
+// ─── RESPONSIVE RESIZE (NO TRANSFORMS) ──────────────────────
 function resizeGame() {
 	const container = document.getElementById("game-container");
 	const scaleX = window.innerWidth / GAME_W;
 	const scaleY = window.innerHeight / GAME_H;
-	const scale = Math.min(scaleX, scaleY, 1); // Clamp at maximum 1x native scale
+	const scale = Math.min(scaleX, scaleY, 1);
 
-	// Apply scale via CSS transforms for flawless sub-pixel scaling
-	container.style.transform = `scale(${scale})`;
-	container.style.transformOrigin = "center center";
+	container.style.width = Math.max(1, Math.floor(GAME_W * scale)) + "px";
+	container.style.height = Math.max(1, Math.floor(GAME_H * scale)) + "px";
 
-	// Ensure the base container preserves original aspect ratios
-	container.style.width = GAME_W + "px";
-	container.style.height = GAME_H + "px";
+	if (joystickInstance && joystickInstance.destroy) {
+		joystickInstance.destroy();
+		joystickInstance = null;
+		joyX = 0;
+		joyY = 0;
+		initJoystick();
+	}
 }
 window.addEventListener("resize", resizeGame);
 resizeGame();
@@ -351,18 +366,11 @@ function drawIntro() {
 	ctx.textAlign = "left";
 }
 
-// FIX: single handler on the canvas that covers both click (desktop) and
-//      touchend (mobile) without double-firing on mobile (where a tap also
-//      generates a click after touchend).
-let introTouchFired = false;
-
-// --- FIXED INTRO LISTENERS FOR MOBILE & DESKTOP ---
-canvas.addEventListener("click", advanceIntro);
-// Add mobile touch support to skip the intro lines
-canvas.addEventListener(
-	"touchstart",
+document.getElementById("game-container").addEventListener(
+	"pointerdown",
 	(e) => {
-		e.preventDefault(); // Prevents double-triggering on devices that mimic clicks
+		if (gameState !== "intro") return;
+		e.preventDefault();
 		advanceIntro();
 	},
 	{ passive: false },
@@ -627,6 +635,7 @@ function startRevealSequence() {
 function showEnvelope() {
 	const overlay = document.getElementById("ui-overlay");
 	overlay.style.pointerEvents = "all";
+	setJoystickEnabled(false);
 	overlay.innerHTML = `
     <div id="envelope-container" style="
         display: flex;
@@ -715,6 +724,7 @@ the way I once found you.
 
 function showLetter() {
 	const overlay = document.getElementById("ui-overlay");
+	setJoystickEnabled(false);
 	overlay.innerHTML = `
         <div id="letter-container">
             <div id="parchment">
@@ -817,8 +827,13 @@ function sendReplyToDiscord(authorName, replyMessage) {
 	statusText.textContent = "Sending via carrier pigeon... 🕊️";
 	replyBtn.disabled = true;
 
-	const discordWebhookUrl =
-		"https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
+	const discordWebhookUrl = "";
+	if (!discordWebhookUrl) {
+		statusText.style.color = "#ff4444";
+		statusText.textContent = "Reply sending is disabled.";
+		replyBtn.disabled = false;
+		return;
+	}
 
 	const payload = {
 		username: "Island Love Letters",
@@ -876,6 +891,7 @@ function backToIsland() {
 	overlay.innerHTML = "";
 	overlay.style.pointerEvents = "none";
 	gameState = "exploring";
+	setJoystickEnabled(true);
 }
 
 function spawnConfetti() {
@@ -912,12 +928,7 @@ function startMusic() {
 		.catch((err) => console.log("Audio playback blocked:", err));
 }
 
-// Listen for either a desktop click or a mobile tap to kick off the audio context
-canvas.addEventListener("click", startMusic, { once: true });
-canvas.addEventListener("touchstart", startMusic, { once: true });
-// FIX: also trigger music on first touch — mobile requires a user gesture
-canvas.addEventListener("touchend", startMusic, { once: true });
-canvas.addEventListener("click", startMusic, { once: true });
+window.addEventListener("pointerdown", startMusic, { once: true });
 window.addEventListener("keydown", startMusic, { once: true });
 
 function switchToRevealMusic() {
@@ -933,20 +944,17 @@ function toggleMute() {
 }
 
 // ─── JOYSTICK ────────────────────────────────────────────────
-let joyX = 0,
-	joyY = 0;
-let joystickInstance = null;
-
 // ─── JOYSTICK INITIALIZATION ────────────────────────────────
 function initJoystick() {
 	// Simple check to ensure we are on a touch-capable device
 	if (!("ontouchstart" in window || navigator.maxTouchPoints > 0)) return;
 	if (joystickInstance) return;
 
+	setJoystickEnabled(true);
 	joystickInstance = nipplejs.create({
 		zone: document.getElementById("joystick-zone"), // CHANGE: Target joystick-zone directly
 		mode: "static",
-		position: { left: "80px", bottom: "80px" }, // Slightly offset for comfortable thumb placement
+		position: { left: "15%", bottom: "18%" },
 		color: "rgba(255, 215, 0, 0.6)",
 		size: 90,
 	});
