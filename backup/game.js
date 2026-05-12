@@ -4,8 +4,8 @@ const ctx = canvas.getContext("2d");
 const fogCanvas = document.getElementById("fogCanvas");
 const fogCtx = fogCanvas.getContext("2d");
 
-let GAME_W = window.innerWidth;
-let GAME_H = window.innerHeight;
+const GAME_W = 800;
+const GAME_H = 600;
 
 canvas.width = GAME_W;
 canvas.height = GAME_H;
@@ -41,23 +41,16 @@ const camera = {
 	zoom: 1,
 };
 
-// ─── RESPONSIVE RESIZE (FULL SCREEN FILL) ───────────────────
+// ─── RESPONSIVE RESIZE (NO TRANSFORMS) ──────────────────────
 function resizeGame() {
 	const container = document.getElementById("game-container");
-	const W = window.innerWidth;
-	const H = window.innerHeight;
+	const scaleX = window.innerWidth / GAME_W;
+	const scaleY = window.innerHeight / GAME_H;
+	const scale = Math.min(scaleX, scaleY, 1);
+	renderScale = scale || 1;
 
-	GAME_W = W;
-	GAME_H = H;
-	renderScale = 1;
-
-	canvas.width = GAME_W;
-	canvas.height = GAME_H;
-	fogCanvas.width = GAME_W;
-	fogCanvas.height = GAME_H;
-
-	container.style.width = W + "px";
-	container.style.height = H + "px";
+	container.style.width = Math.max(1, Math.floor(GAME_W * scale)) + "px";
+	container.style.height = Math.max(1, Math.floor(GAME_H * scale)) + "px";
 
 	if (joystickInstance && joystickInstance.destroy) {
 		joystickInstance.destroy();
@@ -659,22 +652,10 @@ const destination = {
 
 function checkDestination() {
 	if (gameState !== "exploring") return;
-
 	const c = getGameCoords();
-
-	// Check if player is at the X: 20, Z: -15 spot
 	if (c.x === 20 && c.z === -15) {
-		if (areAllMemoriesCollected()) {
-			// Success: All memories found
-			gameState = "digging";
-			startRevealSequence();
-		} else {
-			// Optional: Give a hint if they haven't found everything yet
-			if (notifTimer <= 0) {
-				// Only show if a notification isn't already active
-				showNotification("I should find all the memories first.");
-			}
-		}
+		gameState = "digging";
+		startRevealSequence();
 	}
 }
 
@@ -1091,10 +1072,6 @@ function takeScreenshot() {
 	link.download = "you-found-me.png";
 	link.href = canvas.toDataURL("image/png");
 	link.click();
-}
-
-function areAllMemoriesCollected() {
-	return memories.every((mem) => mem.collected === true);
 }
 
 // ─── START ───────────────────────────────────────────────────

@@ -16,22 +16,27 @@ html {
 
 body {
 	background: #000;
+	display: flex;
+	justify-content: center;
+	align-items: center;
 	width: 100vw;
 	height: 100vh;
-	height: 100dvh;
+	height: 100dvh; /* FIX: dynamic viewport height — accounts for iOS toolbar */
 	overflow: hidden;
-	touch-action: none;
+	touch-action: none; /* FIX: prevent pinch-zoom / scroll on the game body */
 	-webkit-user-select: none;
 	user-select: none;
 }
 
 #game-container {
-	position: fixed;
-	top: 0;
-	left: 0;
+	position: relative;
 	width: 100vw;
 	height: 100vh;
 	height: 100dvh;
+	margin: auto;
+	display: flex;
+	justify-content: center;
+	align-items: center;
 	overflow: hidden;
 }
 
@@ -56,9 +61,6 @@ body {
 
 /* --- FIXED JOYSTICK ZONE --- */
 #joystick-zone {
-	opacity: 0;
-	/* Ensure it still covers the area you want for touch controls */
-	background: transparent;
 	position: absolute;
 	top: 0;
 	left: 0;
