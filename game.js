@@ -355,25 +355,18 @@ function drawIntro() {
 //      touchend (mobile) without double-firing on mobile (where a tap also
 //      generates a click after touchend).
 let introTouchFired = false;
+
+// --- FIXED INTRO LISTENERS FOR MOBILE & DESKTOP ---
+canvas.addEventListener("click", advanceIntro);
+// Add mobile touch support to skip the intro lines
 canvas.addEventListener(
-	"touchend",
+	"touchstart",
 	(e) => {
-		e.preventDefault(); // stop the synthetic click that follows touchend
-		introTouchFired = true;
-		startMusic();
+		e.preventDefault(); // Prevents double-triggering on devices that mimic clicks
 		advanceIntro();
 	},
 	{ passive: false },
 );
-
-canvas.addEventListener("click", () => {
-	if (introTouchFired) {
-		introTouchFired = false;
-		return;
-	} // already handled by touchend
-	startMusic();
-	advanceIntro();
-});
 
 window.addEventListener("keydown", (e) => {
 	if (gameState === "intro") advanceIntro();
