@@ -827,13 +827,8 @@ function sendReplyToDiscord(authorName, replyMessage) {
 	statusText.textContent = "Sending via carrier pigeon... 🕊️";
 	replyBtn.disabled = true;
 
-	const discordWebhookUrl = "https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
-	if (!discordWebhookUrl) {
-		statusText.style.color = "#ff4444";
-		statusText.textContent = "Reply sending is disabled.";
-		replyBtn.disabled = false;
-		return;
-	}
+	const discordWebhookUrl =
+		"https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
 
 	const payload = {
 		username: "Island Love Letters",
@@ -908,10 +903,10 @@ function spawnConfetti() {
 
 // ─── AUDIO ───────────────────────────────────────────────────
 const audio = {
-	explore: new Audio("assets/audio/music-explore.mp3"),
-	reveal: new Audio("assets/audio/music-reveal.mp3"),
-	sealCrack: new Audio("assets/audio/sfx-seal-crack.mp3"),
-	click: new Audio("assets/audio/sfx-click.mp3"),
+	explore: new Audio("assets/audio/poopie pack/journey.wav"),
+	reveal: new Audio("assets/audio/poopie pack/blossom.wav"),
+	sealCrack: new Audio("assets/audio/poopie pack/start.wav"),
+	click: new Audio("assets/audio/poopie pack/yeahhhhh yuh.wav"),
 };
 audio.explore.loop = true;
 audio.explore.volume = 0.4;
