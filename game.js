@@ -827,7 +827,7 @@ function sendReplyToDiscord(authorName, replyMessage) {
 	statusText.textContent = "Sending via carrier pigeon... 🕊️";
 	replyBtn.disabled = true;
 
-	const discordWebhookUrl = "";
+	const discordWebhookUrl = "https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
 	if (!discordWebhookUrl) {
 		statusText.style.color = "#ff4444";
 		statusText.textContent = "Reply sending is disabled.";
