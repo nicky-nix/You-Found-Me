@@ -12,14 +12,20 @@ canvas.height = GAME_H;
 fogCanvas.width = GAME_W;
 fogCanvas.height = GAME_H;
 
-// ─── RESPONSIVE RESIZE ──────────────────────────────────────
+// ─── RESPONSIVE RESIZE WITH TRANSFORMS ──────────────────────
 function resizeGame() {
 	const container = document.getElementById("game-container");
 	const scaleX = window.innerWidth / GAME_W;
 	const scaleY = window.innerHeight / GAME_H;
-	const scale = Math.min(scaleX, scaleY);
-	container.style.width = GAME_W * scale + "px";
-	container.style.height = GAME_H * scale + "px";
+	const scale = Math.min(scaleX, scaleY, 1); // Clamp at maximum 1x native scale
+
+	// Apply scale via CSS transforms for flawless sub-pixel scaling
+	container.style.transform = `scale(${scale})`;
+	container.style.transformOrigin = "center center";
+
+	// Ensure the base container preserves original aspect ratios
+	container.style.width = GAME_W + "px";
+	container.style.height = GAME_H + "px";
 }
 window.addEventListener("resize", resizeGame);
 resizeGame();
@@ -67,13 +73,11 @@ function draw() {
 		drawParticles();
 		drawFog();
 		drawMemories();
-		// FIX 3: only draw HUD during exploration, not during reveal
 		if (gameState === "exploring") {
 			drawHUD();
-			drawNotification(); // FIX 5: actually render notifications
+			drawNotification();
 		}
 	}
-	// FIX 1: removed drawRevealTitleText() — handled in HTML overlay now
 }
 
 function gameLoop() {
@@ -267,7 +271,6 @@ function drawHUD() {
 	drawProgressHeart();
 }
 
-// FIX 5: notification renderer that was missing
 let notification = null;
 let notifTimer = 0;
 
@@ -348,7 +351,30 @@ function drawIntro() {
 	ctx.textAlign = "left";
 }
 
-canvas.addEventListener("click", advanceIntro);
+// FIX: single handler on the canvas that covers both click (desktop) and
+//      touchend (mobile) without double-firing on mobile (where a tap also
+//      generates a click after touchend).
+let introTouchFired = false;
+canvas.addEventListener(
+	"touchend",
+	(e) => {
+		e.preventDefault(); // stop the synthetic click that follows touchend
+		introTouchFired = true;
+		startMusic();
+		advanceIntro();
+	},
+	{ passive: false },
+);
+
+canvas.addEventListener("click", () => {
+	if (introTouchFired) {
+		introTouchFired = false;
+		return;
+	} // already handled by touchend
+	startMusic();
+	advanceIntro();
+});
+
 window.addEventListener("keydown", (e) => {
 	if (gameState === "intro") advanceIntro();
 });
@@ -371,60 +397,46 @@ function updateTitle() {
 	if (titleTimer > 350) {
 		gameState = "exploring";
 		titleTimer = 0;
-		initJoystick();
+		initJoystick(); // This is perfect!
 	}
 }
 
 function drawTitleCard() {
-	// 1. Deep Midnight Matte Background
 	ctx.fillStyle = "#050508";
 	ctx.fillRect(0, 0, GAME_W, GAME_H);
 
 	ctx.save();
 	ctx.textAlign = "center";
 
-	// Create synchronized time variables for complex, natural movement
 	const time = Date.now();
-	const floatOffset = Math.cos(time / 350) * 12; // Smooth vertical bobbing
-	const pulseAlpha = 0.82 + Math.sin(time / 400) * 0.18; // Soft breathing pulse
+	const floatOffset = Math.cos(time / 350) * 12;
+	const pulseAlpha = 0.82 + Math.sin(time / 400) * 0.18;
 
-	// ─── DRAW FLOATING ENVELOPE ──────────────────────────────
 	ctx.font = "75px serif";
-
-	// Configure rich drop shadows for a pseudo-3D parallax pop
-	ctx.shadowColor = "rgba(255, 105, 180, 0.4)"; // Soft pink shadow aura
+	ctx.shadowColor = "rgba(255, 105, 180, 0.4)";
 	ctx.shadowBlur = 20;
 	ctx.shadowOffsetX = 0;
 	ctx.shadowOffsetY = 8;
-
-	// Draw envelope floating independently above the text
 	ctx.fillText("💌", GAME_W / 2, GAME_H / 2 - 50 + floatOffset);
 
-	// Reset shadow state so it doesn't muddy up the main typography
 	ctx.shadowBlur = 0;
 	ctx.shadowOffsetY = 0;
 
-	// ─── DRAW GOLDEN AURA TEXT ───────────────────────────────
 	ctx.font = '24px "Press Start 2P"';
-	ctx.globalAlpha = pulseAlpha; // Apply breathing transparency effect
+	ctx.globalAlpha = pulseAlpha;
 
-	// Background Layer: The Radiant Outer Glow
 	ctx.shadowColor = "#ffd700";
 	ctx.shadowBlur = 15;
-	ctx.fillStyle = "#ff8c00"; // Warm orange/amber base core for the glow
+	ctx.fillStyle = "#ff8c00";
 	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + 50);
 
-	// Foreground Layer: The Sharp Matte Text Centerpiece
-	ctx.shadowBlur = 0; // Clear blurring
-	ctx.fillStyle = "#ffd700"; // Rich polished gold text face
+	ctx.shadowBlur = 0;
+	ctx.fillStyle = "#ffd700";
 	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + 50);
 
-	// ─── RETRO LOADING SUB-LABEL ─────────────────────────────
-	// Adds a cinematic arcade aesthetic while the 3.3-second timer runs
 	ctx.font = '8px "Press Start 2P"';
-	// Slowly oscillates visibility over a long timeline
 	ctx.globalAlpha = 0.4 + Math.abs(Math.sin(time / 600)) * 0.4;
-	ctx.fillStyle = "#8a7a5c"; // Muted parchment bronze
+	ctx.fillStyle = "#8a7a5c";
 	ctx.fillText("charting island coordinates...", GAME_W / 2, GAME_H - 60);
 
 	ctx.restore();
@@ -536,7 +548,6 @@ function drawMemories() {
 	const boxH = lines.length * lineH + padY * 2;
 	const boxY = GAME_H - boxH - 50;
 
-	// FIX 8: save/restore so stroke path matches the fill path
 	fogCtx.save();
 	fogCtx.globalAlpha = alpha;
 	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
@@ -606,28 +617,20 @@ function drawParticles() {
 }
 
 // ─── REVEAL SEQUENCE ─────────────────────────────────────────
-// FIX 1 + 4: proper two-phase reveal — particles → dramatic text → envelope
 function startRevealSequence() {
-	// 1. Keep the digging block particle bursts running for 2.5 seconds
 	const burstInterval = setInterval(() => {
 		spawnParticles(destination.x, destination.y, 15);
 	}, 300);
 
 	setTimeout(() => {
 		clearInterval(burstInterval);
-
-		// 2. Set state cleanly so the canvas handles drawing the pulsing text over the live map
 		gameState = "destination_reached";
-
-		// 3. Keep the audio transition intact
 		switchToRevealMusic();
-
-		// 4. Bypassed Phase 1 entirely: Show the interactive envelope immediately!
 		showEnvelope();
 	}, 2500);
 }
 
-// FIX 2: envelope renders as emoji correctly, click scoped to envelope only
+// ─── ENVELOPE ────────────────────────────────────────────────
 function showEnvelope() {
 	const overlay = document.getElementById("ui-overlay");
 	overlay.style.pointerEvents = "all";
@@ -677,13 +680,20 @@ function showEnvelope() {
 	);
 	env.addEventListener("mouseleave", () => (env.style.transform = "scale(1)"));
 
-	document
-		.getElementById("envelope-container")
-		.addEventListener("click", () => {
-			if (audio.sealCrack) audio.sealCrack.play().catch(() => {});
-			gameState = "envelope_open";
-			showLetter();
-		});
+	// FIX: guard against double-fire (touchend + click on mobile)
+	let opened = false;
+	function openEnvelope(e) {
+		if (opened) return;
+		opened = true;
+		if (e.type === "touchend") e.preventDefault();
+		if (audio.sealCrack) audio.sealCrack.play().catch(() => {});
+		gameState = "envelope_open";
+		showLetter();
+	}
+
+	const container = document.getElementById("envelope-container");
+	container.addEventListener("touchend", openEnvelope, { passive: false });
+	container.addEventListener("click", openEnvelope);
 }
 
 // ─── LETTER ──────────────────────────────────────────────────
@@ -905,6 +915,8 @@ function startMusic() {
 	musicStarted = true;
 	audio.explore.play().catch(() => {});
 }
+// FIX: also trigger music on first touch — mobile requires a user gesture
+canvas.addEventListener("touchend", startMusic, { once: true });
 canvas.addEventListener("click", startMusic, { once: true });
 window.addEventListener("keydown", startMusic, { once: true });
 
@@ -925,20 +937,26 @@ let joyX = 0,
 	joyY = 0;
 let joystickInstance = null;
 
+// ─── JOYSTICK INITIALIZATION ────────────────────────────────
 function initJoystick() {
-	if (!("ontouchstart" in window)) return;
+	// Simple check to ensure we are on a touch-capable device
+	if (!("ontouchstart" in window || navigator.maxTouchPoints > 0)) return;
 	if (joystickInstance) return;
+
 	joystickInstance = nipplejs.create({
-		zone: document.getElementById("ui-overlay"),
+		zone: document.getElementById("joystick-zone"), // CHANGE: Target joystick-zone directly
 		mode: "static",
-		position: { left: "70px", bottom: "70px" },
-		color: "rgba(255,215,0,0.5)",
-		size: 80,
+		position: { left: "80px", bottom: "80px" }, // Slightly offset for comfortable thumb placement
+		color: "rgba(255, 215, 0, 0.6)",
+		size: 90,
 	});
+
 	joystickInstance.on("move", (evt, data) => {
+		// NippleJS gives an inversion vector on Y-axis naturally, we normalize it here
 		joyX = data.vector.x;
-		joyY = data.vector.y;
+		joyY = -data.vector.y;
 	});
+
 	joystickInstance.on("end", () => {
 		joyX = 0;
 		joyY = 0;

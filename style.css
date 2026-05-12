@@ -30,9 +30,13 @@ body {
 
 #game-container {
 	position: relative;
-	/* Width/height set by JS resizeGame() — starts at native canvas size */
-	width: 800px;
-	height: 600px;
+	/* Center it perfectly using flexbox layouts from body */
+	margin: auto;
+	max-width: 100%;
+	max-height: 100%;
+	display: flex;
+	justify-content: center;
+	align-items: center;
 }
 
 /* Canvas fills the container exactly; JS sets container size, CSS scales canvas inside it */
@@ -54,31 +58,26 @@ body {
 	pointer-events: none;
 }
 
-/* FIX: joystick-zone sits BELOW ui-overlay so letter/envelope can
-   cover the screen without stealing the joystick's touch events.
-   It matches the game-container size exactly (set by JS resizeGame). */
+/* --- FIXED JOYSTICK ZONE --- */
 #joystick-zone {
 	position: absolute;
 	top: 0;
 	left: 0;
 	width: 100%;
 	height: 100%;
-	z-index: 5; /* below ui-overlay (10) */
-	pointer-events: none; /* JS sets to "all" once joystick inits */
-	touch-action: none;
+	z-index: 6; /* Place it strictly between the canvases (0) and UI Letter Overlay (10) */
+	pointer-events: all; /* CHANGE: Must be "all" so Nipple.js can capture touch starts! */
+	touch-action: none; /* Prevents default mobile panning/scrolling during gameplay */
 }
 
-/* ui-overlay: pointer-events NONE by default so touches reach the canvas.
-   JS flips to "all" when showing envelope/letter. */
 #ui-overlay {
 	position: absolute;
 	top: 0;
 	left: 0;
 	width: 100%;
 	height: 100%;
-	pointer-events: none;
+	pointer-events: none; /* Keeps it clicking through to the joystick during exploration */
 	z-index: 10;
-	/* FIX: allow scrolling inside the letter parchment on touch */
 	-webkit-overflow-scrolling: touch;
 }
 
