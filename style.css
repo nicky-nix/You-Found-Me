@@ -1,0 +1,197 @@
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+body {
+	background: #000;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	width: 100vw;
+	height: 100vh;
+	overflow: hidden;
+}
+
+/* This wrapper is what we actually size */
+#game-container {
+	position: relative;
+	/* Will be sized by JS to fit the viewport */
+	width: 800px;
+	height: 600px;
+	max-width: 100vw;
+	max-height: 100vh;
+}
+
+/* Canvas fills the container */
+#gameCanvas,
+#fogCanvas {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	image-rendering: pixelated;
+	image-rendering: crisp-edges;
+}
+
+#fogCanvas {
+	pointer-events: none;
+}
+
+#ui-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 10;
+}
+
+/* ── Confetti fall animation ── */
+@keyframes fall {
+	to {
+		transform: translateY(110vh) rotate(360deg);
+		opacity: 0;
+	}
+}
+
+/* ── Envelope ── */
+#envelope-container {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	background: rgba(5, 5, 10, 0.92);
+	animation: fadeIn 0.6s ease;
+	cursor: pointer;
+	gap: 16px;
+}
+
+#envelope {
+	width: clamp(140px, 30vw, 200px);
+	height: clamp(100px, 22vw, 140px);
+	background: #f5e6c8;
+	border: 3px solid #c8a000;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	animation: riseUp 1s ease forwards;
+	box-shadow: 0 0 40px rgba(200, 160, 0, 0.4);
+}
+
+#envelope-heart {
+	font-size: clamp(28px, 6vw, 40px);
+}
+
+#envelope-hint {
+	font-family: "Press Start 2P", monospace;
+	font-size: clamp(7px, 1.5vw, 9px);
+	color: rgba(255, 215, 0, 0.6);
+	animation: pulse 1.5s ease infinite;
+}
+
+@keyframes riseUp {
+	from {
+		transform: translateY(80px) scale(0.6);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0) scale(1);
+		opacity: 1;
+	}
+}
+
+@keyframes pulse {
+	0%,
+	100% {
+		opacity: 0.4;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+/* ── Letter ── */
+#letter-container {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	background: rgba(5, 5, 10, 0.95);
+	animation: fadeIn 1s ease;
+	padding: 16px;
+	gap: 16px;
+}
+
+#parchment {
+	background: #fdf6e3;
+	border: 2px solid #c8a000;
+	border-radius: 8px;
+	padding: clamp(20px, 5vw, 40px);
+	width: min(520px, calc(100vw - 32px));
+	max-height: calc(100vh - 140px);
+	overflow-y: auto;
+	box-shadow: 0 0 50px rgba(200, 160, 0, 0.3);
+	scrollbar-width: thin;
+}
+
+#letter-text {
+	font-family: "Cormorant Garamond", Georgia, serif;
+	font-size: clamp(15px, 3.5vw, 19px);
+	line-height: 1.85;
+	color: #3a2a1a;
+	white-space: pre-wrap;
+}
+
+#letter-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	justify-content: center;
+	transition: opacity 1s ease;
+}
+
+#letter-buttons button {
+	font-family: "Press Start 2P", monospace;
+	font-size: clamp(7px, 1.5vw, 10px);
+	padding: clamp(10px, 2vw, 14px) clamp(14px, 3vw, 22px);
+	background: #0d0e14;
+	color: #ffd700;
+	border: 2px solid #ffd700;
+	cursor: pointer;
+	border-radius: 4px;
+	transition:
+		background 0.2s,
+		color 0.2s;
+	pointer-events: all;
+}
+
+#letter-buttons button:hover,
+#letter-buttons button:active {
+	background: #ffd700;
+	color: #0d0e14;
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/* When exploring, the overlay must accept touch for joystick */
+#ui-overlay.exploring {
+	pointer-events: all;
+}
+
+/* Joystick sits bottom-left, letter/envelope sit center — they don't conflict */
