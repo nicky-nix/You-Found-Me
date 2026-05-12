@@ -2,7 +2,17 @@
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<!-- FIX: prevent pinch-zoom and iOS double-tap zoom -->
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+		/>
+		<!-- FIX: iOS full-screen / status bar -->
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta
+			name="apple-mobile-web-app-status-bar-style"
+			content="black-translucent"
+		/>
 		<title>You Found Me 💌</title>
 		<link rel="stylesheet" href="style.css" />
 
@@ -17,13 +27,22 @@
 			rel="stylesheet"
 		/>
 
-		<!-- Mobile joystick (Phase 6) -->
+		<!-- Mobile joystick — must load before game.js -->
 		<script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.1/dist/nipplejs.min.js"></script>
 	</head>
 	<body>
 		<div id="game-container">
 			<canvas id="gameCanvas"></canvas>
 			<canvas id="fogCanvas"></canvas>
+
+			<!--
+				FIX: joystick-zone is its OWN element, layered BELOW ui-overlay (z-index 5 vs 10).
+				This means when ui-overlay gets pointer-events:all for the letter/envelope,
+				it won't swallow the joystick — and when the overlay is pointer-events:none
+				during exploration, the joystick-zone (always pointer-events:all) still works.
+			-->
+			<div id="joystick-zone"></div>
+
 			<div id="ui-overlay"></div>
 		</div>
 		<script src="game.js"></script>

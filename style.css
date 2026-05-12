@@ -4,6 +4,16 @@
 	box-sizing: border-box;
 }
 
+/* FIX: touch-action:none stops browser scroll/zoom hijacking the game.
+   -webkit-overflow-scrolling kept off at root level.
+   height uses dvh so iOS Safari toolbar doesn't shrink the viewport unexpectedly. */
+html {
+	height: 100%;
+	height: 100dvh;
+	overflow: hidden;
+	touch-action: none;
+}
+
 body {
 	background: #000;
 	display: flex;
@@ -11,20 +21,21 @@ body {
 	align-items: center;
 	width: 100vw;
 	height: 100vh;
+	height: 100dvh; /* FIX: dynamic viewport height — accounts for iOS toolbar */
 	overflow: hidden;
+	touch-action: none; /* FIX: prevent pinch-zoom / scroll on the game body */
+	-webkit-user-select: none;
+	user-select: none;
 }
 
-/* This wrapper is what we actually size */
 #game-container {
 	position: relative;
-	/* Will be sized by JS to fit the viewport */
+	/* Width/height set by JS resizeGame() — starts at native canvas size */
 	width: 800px;
 	height: 600px;
-	max-width: 100vw;
-	max-height: 100vh;
 }
 
-/* Canvas fills the container */
+/* Canvas fills the container exactly; JS sets container size, CSS scales canvas inside it */
 #gameCanvas,
 #fogCanvas {
 	position: absolute;
@@ -34,12 +45,31 @@ body {
 	height: 100%;
 	image-rendering: pixelated;
 	image-rendering: crisp-edges;
+	/* FIX: prevent iOS long-press callout and text selection on canvas */
+	-webkit-tap-highlight-color: transparent;
+	touch-action: none;
 }
 
 #fogCanvas {
 	pointer-events: none;
 }
 
+/* FIX: joystick-zone sits BELOW ui-overlay so letter/envelope can
+   cover the screen without stealing the joystick's touch events.
+   It matches the game-container size exactly (set by JS resizeGame). */
+#joystick-zone {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 5; /* below ui-overlay (10) */
+	pointer-events: none; /* JS sets to "all" once joystick inits */
+	touch-action: none;
+}
+
+/* ui-overlay: pointer-events NONE by default so touches reach the canvas.
+   JS flips to "all" when showing envelope/letter. */
 #ui-overlay {
 	position: absolute;
 	top: 0;
@@ -48,6 +78,8 @@ body {
 	height: 100%;
 	pointer-events: none;
 	z-index: 10;
+	/* FIX: allow scrolling inside the letter parchment on touch */
+	-webkit-overflow-scrolling: touch;
 }
 
 /* ── Confetti fall animation ── */
@@ -70,6 +102,8 @@ body {
 	animation: fadeIn 0.6s ease;
 	cursor: pointer;
 	gap: 16px;
+	/* FIX: allow tap on the whole container */
+	touch-action: manipulation;
 }
 
 #envelope {
@@ -129,6 +163,9 @@ body {
 	animation: fadeIn 1s ease;
 	padding: 16px;
 	gap: 16px;
+	/* FIX: let the letter container itself scroll on very small screens */
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
 }
 
 #parchment {
@@ -137,8 +174,10 @@ body {
 	border-radius: 8px;
 	padding: clamp(20px, 5vw, 40px);
 	width: min(520px, calc(100vw - 32px));
-	max-height: calc(100vh - 140px);
+	/* FIX: max-height uses dvh so parchment never overflows on mobile */
+	max-height: calc(100dvh - 140px);
 	overflow-y: auto;
+	-webkit-overflow-scrolling: touch; /* FIX: smooth scroll inside parchment on iOS */
 	box-shadow: 0 0 50px rgba(200, 160, 0, 0.3);
 	scrollbar-width: thin;
 }
@@ -172,6 +211,8 @@ body {
 		background 0.2s,
 		color 0.2s;
 	pointer-events: all;
+	/* FIX: prevent double-tap zoom on buttons */
+	touch-action: manipulation;
 }
 
 #letter-buttons button:hover,
@@ -188,10 +229,3 @@ body {
 		opacity: 1;
 	}
 }
-
-/* When exploring, the overlay must accept touch for joystick */
-#ui-overlay.exploring {
-	pointer-events: all;
-}
-
-/* Joystick sits bottom-left, letter/envelope sit center — they don't conflict */
