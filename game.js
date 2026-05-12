@@ -81,7 +81,7 @@ function update() {
 	if (gameState === "exploring") {
 		updatePlayer();
 		updateCamera();
-		updateWings();
+		//updateWings();
 		updateMemories();
 		updateParticles();
 		checkDestination();
@@ -150,7 +150,7 @@ function draw() {
 		ctx.save();
 		applyCameraTransform(ctx);
 		drawMap();
-		drawWings();
+		//drawWings();
 		drawPlayer();
 		drawParticles();
 		drawMemoryMarkers();
