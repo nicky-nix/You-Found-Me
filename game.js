@@ -663,25 +663,45 @@ function drawMemoryPopup() {
 	const alpha = Math.min(1, memoryTimer / 40);
 	const lines = activeMemory;
 	const padX = uiPx(20);
-	const padY = uiPx(12);
-	const lineH = uiPx(18);
-	const boxW = GAME_W_CURRENT - uiPx(40);
+	const padY = uiPx(20); // Slightly more padding for a centered look
+	const lineH = uiPx(22); // Increased line height for readability
+
+	// 1. Calculate Box Dimensions
+	// We'll make the box 80% of the screen width, but capped at a reasonable size
+	const boxW = Math.min(GAME_W_CURRENT - uiPx(60), uiPx(400));
 	const boxH = lines.length * lineH + padY * 2;
-	const boxY = GAME_H_CURRENT - boxH - uiPx(50);
+
+	// 2. Calculate Center Coordinates
+	const boxX = (GAME_W_CURRENT - boxW) / 2;
+	const boxY = (GAME_H_CURRENT - boxH) / 2;
 
 	fogCtx.save();
 	fogCtx.globalAlpha = alpha;
+
+	// 3. Draw Background Box
 	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
-	roundRect(fogCtx, padX, boxY, boxW, boxH, uiPx(8));
+	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(12));
+
+	// 4. Draw Border
 	fogCtx.strokeStyle = "#ffd700";
 	fogCtx.lineWidth = uiPx(2);
 	fogCtx.stroke();
 
-	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
+	// 5. Draw Text (Centered)
+	fogCtx.font = `${uiPx(10)}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#fff8dc";
+	fogCtx.textAlign = "center"; // Center the text alignment
+
 	lines.forEach((line, i) => {
-		fogCtx.fillText(line, padX + uiPx(14), boxY + padY + uiPx(12) + i * lineH);
+		// X is the center of the screen
+		// Y starts from the box top + padding + offset for the first line
+		fogCtx.fillText(
+			line,
+			GAME_W_CURRENT / 2,
+			boxY + padY + uiPx(12) + i * lineH,
+		);
 	});
+
 	fogCtx.restore();
 }
 
