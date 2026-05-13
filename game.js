@@ -28,8 +28,7 @@ let joystickInstance = null;
 let renderScale = 1;
 
 function uiPx(px) {
-	const downscale = Math.min(renderScale, 1);
-	return Math.max(1, Math.round(px / downscale));
+	return Math.max(1, Math.round(px * renderScale));
 }
 
 function clamp(n, min, max) {
@@ -43,6 +42,7 @@ const camera = {
 };
 
 // ─── RESPONSIVE RESIZE (FULL SCREEN FILL) ───────────────────
+// Replace the resizeGame function inside game.js with this:
 function resizeGame() {
 	const container = document.getElementById("game-container");
 	const W = window.innerWidth;
@@ -50,7 +50,16 @@ function resizeGame() {
 
 	GAME_W = W;
 	GAME_H = H;
-	renderScale = 1;
+
+	// Calculate baseline aspect ratio scaling
+	const baselineW = 1280;
+	const baselineH = 720;
+	const scaleX = W / baselineW;
+	const scaleY = H / baselineH;
+
+	// Math.min protects UI bounds on extreme portrait/landscape ratios
+	// Clamp prevents UI elements from becoming overly microscopic or massive
+	renderScale = Math.max(0.65, Math.min(1.35, Math.min(scaleX, scaleY)));
 
 	canvas.width = GAME_W;
 	canvas.height = GAME_H;
@@ -68,6 +77,7 @@ function resizeGame() {
 		initJoystick();
 	}
 }
+
 window.addEventListener("resize", resizeGame);
 resizeGame();
 

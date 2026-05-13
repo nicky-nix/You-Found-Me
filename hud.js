@@ -172,10 +172,12 @@ function updateHUDMovement() {
 	playerSpeed = Math.sqrt(playerVelX * playerVelX + playerVelY * playerVelY);
 	smoothSpeed += (playerSpeed - smoothSpeed) * 0.1;
 
-	// Tilt: lean into horizontal movement direction, max ±4°
+	// Heart Tracker Tilt: lean into horizontal movement direction, max ±4°
 	var targetTilt = clamp(playerVelX * 0.012, -0.07, 0.07);
 	panelTilt += (targetTilt - panelTilt) * 0.13;
-	compassTilt += (-targetTilt - compassTilt) * 0.13; // compass mirrors
+
+	// Completely freeze the compass tilt (and other panels) at 0 radians
+	compassTilt = 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -295,6 +297,7 @@ function drawProgressHeart() {
 	var screenPX = worldToScreenX(player.x + player.width / 2);
 	var screenPY = worldToScreenY(player.y);
 
+	// Clamping mechanics now adapt fully to responsive bounding ranges
 	var cx = clamp(screenPX, W / 2 + uiPx(10), GAME_W - W / 2 - uiPx(10));
 	var cy = clamp(
 		screenPY - H / 2 - uiPx(18),
@@ -318,7 +321,7 @@ function drawProgressHeart() {
 	var lx = -W / 2,
 		ly = -H / 2;
 
-	// Heart emoji
+	// Heart emoji - dynamically scales alongside base text metrics
 	var heartBeat = Math.sin(hudPulseCycle * 2.4) * uiPx(0.8) * pct;
 	fogCtx.font = uiPx(14) + heartBeat + "px serif";
 	fogCtx.textAlign = "center";
@@ -399,7 +402,7 @@ function drawProgressHeart() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  3. MEMORIES BAR — fixed top-left, tilts with movement, flashes on pickup
+//  3. MEMORIES BAR — fixed top-left, stabilizes on movement, flashes on pickup
 // ─────────────────────────────────────────────────────────────────────────────
 
 function drawMemoriesBar() {
@@ -430,11 +433,12 @@ function drawMemoriesBar() {
 	var gVal = Math.round(180 + 60 * flash);
 	var accent = "rgba(80," + gVal + ",130,1)";
 
-	drawLightPanel(fogCtx, cx, cy, W, H, r, accent, panelTilt);
+	// Locked completely stable at 0 radians rotation
+	drawLightPanel(fogCtx, cx, cy, W, H, r, accent, 0);
 
 	fogCtx.save();
 	fogCtx.translate(cx, cy);
-	fogCtx.rotate(panelTilt);
+	fogCtx.rotate(0);
 
 	var lx = -W / 2,
 		ly = -H / 2;
@@ -490,7 +494,7 @@ function drawMemoriesBar() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  4. FLIGHT BADGE — below memories, tilts, bounces
+//  4. FLIGHT BADGE — below memories, stabilizes, bounces
 // ─────────────────────────────────────────────────────────────────────────────
 
 function drawFlightBadge() {
@@ -507,11 +511,11 @@ function drawFlightBadge() {
 	// Sky-blue accent
 	var accent = "rgba(80,175," + Math.round(230 + 25 * flyPulse) + ",1)";
 
-	drawLightPanel(fogCtx, cx, cy, W, H, r, accent, panelTilt);
+	drawLightPanel(fogCtx, cx, cy, W, H, r, accent, 0);
 
 	fogCtx.save();
 	fogCtx.translate(cx, cy);
-	fogCtx.rotate(panelTilt);
+	fogCtx.rotate(0);
 
 	fogCtx.font = uiPx(7) + 'px "Press Start 2P"';
 	fogCtx.fillStyle = "#1a5080";
@@ -545,7 +549,8 @@ function drawNotification() {
 		verticalSlide = (1 - animAlpha) * uiPx(-10);
 	}
 
-	var bannerW = Math.min(GAME_W - uiPx(48), uiPx(560));
+	// Dynamic layout constraints for high/low density portrait and widescreen layouts
+	var bannerW = Math.min(GAME_W - uiPx(32), uiPx(560));
 	var bannerH = uiPx(40);
 	var bannerCX = GAME_W / 2;
 	var bannerCY = GAME_H - bannerH / 2 - uiPx(56) + verticalSlide;
@@ -553,7 +558,6 @@ function drawNotification() {
 	fogCtx.save();
 	fogCtx.globalAlpha = animAlpha;
 
-	// Slight wobble tilt matching the rest of HUD
 	drawLightPanel(
 		fogCtx,
 		bannerCX,
@@ -562,7 +566,7 @@ function drawNotification() {
 		bannerH,
 		uiPx(10),
 		"rgba(210, 165, 60, 1)",
-		panelTilt * 0.4,
+		0,
 	);
 
 	var shakeY = 0;
@@ -571,7 +575,7 @@ function drawNotification() {
 	}
 
 	fogCtx.translate(bannerCX, bannerCY + shakeY);
-	fogCtx.rotate(panelTilt * 0.4);
+	fogCtx.rotate(0);
 
 	fogCtx.font = uiPx(8) + 'px "Press Start 2P"';
 	fogCtx.fillStyle = "#3a2208";
