@@ -97,7 +97,7 @@ function update() {
 
 function updateCamera() {
 	const isMobile = window.innerWidth < 700;
-	camera.zoom = isMobile ? 1 : 1;
+	camera.zoom = isMobile ? 0.6 : 1;
 
 	const worldW = map[0].length * TILE_SIZE;
 	const worldH = map.length * TILE_SIZE;
@@ -190,7 +190,7 @@ const player = {
 	y: 64 * 32 + 8, // row 64 — beach spawn
 	width: 16,
 	height: 16,
-	speed: 6,
+	speed: 3.7,
 	color: "White",
 	hasWings: false,
 };
@@ -297,87 +297,6 @@ function drawFog() {
 	fogCtx.arc(cx, cy, radius, 0, Math.PI * 2);
 	fogCtx.fill();
 	fogCtx.globalCompositeOperation = "source-over";
-}
-
-// ─── HUD ─────────────────────────────────────────────────────
-function getGameCoords() {
-	return {
-		x: Math.floor(player.x / TILE_SIZE),
-		z: -Math.floor(player.y / TILE_SIZE),
-	};
-}
-
-function drawHUD() {
-	const coords = getGameCoords();
-
-	fogCtx.fillStyle = "rgba(0,0,0,0.7)";
-	roundRect(fogCtx, GAME_W - uiPx(168), uiPx(10), uiPx(158), uiPx(44), uiPx(6));
-
-	fogCtx.font = `${uiPx(10)}px "Press Start 2P"`;
-	fogCtx.fillStyle = "#ffd700";
-	fogCtx.fillText(`X: ${coords.x}`, GAME_W - uiPx(152), uiPx(29));
-	fogCtx.fillText(`Z: ${coords.z}`, GAME_W - uiPx(152), uiPx(47));
-
-	if (player.hasWings) {
-		fogCtx.fillStyle = "rgba(255,255,255,0.15)";
-		roundRect(fogCtx, uiPx(10), uiPx(10), uiPx(80), uiPx(24), uiPx(4));
-		fogCtx.font = `${uiPx(7)}px "Press Start 2P"`;
-		fogCtx.fillStyle = "#ffffff";
-		fogCtx.fillText("🪽 FLYING", uiPx(16), uiPx(26));
-	}
-
-	drawProgressHeart();
-}
-
-let notification = null;
-let notifTimer = 0;
-
-function showNotification(msg) {
-	notification = msg;
-	notifTimer = 180;
-}
-
-function drawNotification() {
-	if (!notification || notifTimer <= 0) return;
-	notifTimer--;
-
-	const alpha = Math.min(1, notifTimer / 30);
-	fogCtx.globalAlpha = alpha;
-	fogCtx.fillStyle = "rgba(10,8,5,0.9)";
-	fogCtx.strokeStyle = "#ffd700";
-	fogCtx.lineWidth = uiPx(2);
-	roundRect(
-		fogCtx,
-		uiPx(20),
-		GAME_H - uiPx(80),
-		GAME_W - uiPx(40),
-		uiPx(30),
-		uiPx(6),
-	);
-	fogCtx.stroke();
-	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
-	fogCtx.fillStyle = "#fff8dc";
-	fogCtx.textAlign = "center";
-	fogCtx.fillText(notification, GAME_W / 2, GAME_H - uiPx(59));
-	fogCtx.textAlign = "left";
-	fogCtx.globalAlpha = 1;
-
-	if (notifTimer <= 0) notification = null;
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-	ctx.beginPath();
-	ctx.moveTo(x + r, y);
-	ctx.lineTo(x + w - r, y);
-	ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-	ctx.lineTo(x + w, y + h - r);
-	ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-	ctx.lineTo(x + r, y + h);
-	ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-	ctx.lineTo(x, y + r);
-	ctx.quadraticCurveTo(x, y, x + r, y);
-	ctx.closePath();
-	ctx.fill();
 }
 
 // ─── INTRO ───────────────────────────────────────────────────
@@ -496,7 +415,7 @@ let titleTimer = 0;
 
 function updateTitle() {
 	titleTimer++;
-	if (titleTimer > 350) {
+	if (titleTimer > 210) {
 		gameState = "exploring";
 		titleTimer = 0;
 		updateCamera();
@@ -563,12 +482,21 @@ function updateWings() {
 	if (wings.collected) return;
 	const dx = player.x - wings.x;
 	const dy = player.y - wings.y;
-	if (Math.sqrt(dx * dx + dy * dy) < 20) {
-		wings.collected = true;
-		player.hasWings = true;
 
-		// ─── UPDATED: Put the wing notification into the safe message queue ───
-		queueMessage("Wings collected! You can fly!");
+	if (Math.sqrt(dx * dx + dy * dy) < 20) {
+		// Check if all memories have been found
+		if (areAllMemoriesCollected()) {
+			wings.collected = true;
+			player.hasWings = true;
+
+			// Put the wing notification into the safe message queue
+			queueMessage("Wings collected! You can fly!");
+		} else {
+			// Only queue the reminder if there isn't a message currently active or queued
+			if (!isDisplayingMemory && memoryQueue.length === 0) {
+				queueMessage("You forgot how to fly, get all the memories first");
+			}
+		}
 	}
 }
 
@@ -602,6 +530,13 @@ const memories = STORY_MEMORIES.map((m) => ({
 	text: m.lines,
 }));
 
+memories.push({
+	x: 35 * 32 + 16, // Change 35 to whatever Tile X coordinate you want
+	y: 40 * 32 + 16, // Change 40 to whatever Tile Y coordinate you want
+	collected: false,
+	text: ["???"],
+});
+
 let activeMemory = null;
 let memoryTimer = 0;
 
@@ -618,15 +553,23 @@ function updateMemories() {
 				.play()
 				.catch((err) => console.log("Sound blocked:", err));
 
-			// ─── UPDATED: Send memory text array to the unified queue ───
+			// 1. Queue the regular text assigned to this specific memory orb
 			queueMessage(mem.text);
+
+			// 2. CHECK IF THIS WAS THE LAST ONE:
+			// It doesn't matter which orb it is; if all are now collected, append the unlock message!
+			if (areAllMemoriesCollected()) {
+				queueMessage([
+					"✨ A strange warmth flows through you...",
+					"You know how to fly now! Go find the wings!",
+				]);
+			}
 		}
 	});
 
 	if (memoryTimer > 0) {
 		memoryTimer--;
 	} else if (isDisplayingMemory) {
-		// Box timer finished, reset flags and pull next item in line seamlessly
 		activeMemory = null;
 		isDisplayingMemory = false;
 		processNextMemory();
@@ -671,7 +614,7 @@ function drawMemoryPopup() {
 	// Detect if user is on PC (wider screen)
 	const isPC = window.innerWidth >= 700;
 	const alpha = Math.min(1, memoryTimer / 40);
-	const lines = activeMemory;
+	const rawLines = activeMemory;
 
 	// Adaptive Font & Spacing (PC vs Mobile)
 	const fontSize = isPC ? uiPx(16) : uiPx(8); // 16px on PC, 8px on Mobile
@@ -684,11 +627,40 @@ function drawMemoryPopup() {
 	const boxW = isPC
 		? Math.min(GAME_W - uiPx(100), uiPx(750))
 		: GAME_W - uiPx(40);
+
+	// Set the font early so we can measure text width accurately
+	fogCtx.save();
+	fogCtx.font = `${fontSize}px "Press Start 2P"`;
+
+	// ─── NEW: DYNAMIC TEXT WRAPPING ───
+	let lines = [];
+	const maxTextWidth = boxW - padX * 2; // Leave breathing room on the sides
+
+	rawLines.forEach((structLine) => {
+		const words = structLine.split(" ");
+		let currentLine = "";
+
+		words.forEach((word) => {
+			let testLine = currentLine + (currentLine === "" ? "" : " ") + word;
+			let testWidth = fogCtx.measureText(testLine).width;
+
+			if (testWidth > maxTextWidth && currentLine !== "") {
+				lines.push(currentLine);
+				currentLine = word;
+			} else {
+				currentLine = testLine;
+			}
+		});
+		if (currentLine !== "") {
+			lines.push(currentLine);
+		}
+	});
+
+	// Recalculate Box Height dynamically based on wrapped line count!
 	const boxH = lines.length * lineH + padY * 2;
 	const boxX = (GAME_W - boxW) / 2;
 	const boxY = GAME_H - boxH - uiPx(50);
 
-	fogCtx.save();
 	fogCtx.globalAlpha = alpha;
 
 	// Draw Background Box
@@ -701,7 +673,6 @@ function drawMemoryPopup() {
 	fogCtx.stroke();
 
 	// Draw Text
-	fogCtx.font = `${fontSize}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#fff8dc";
 	fogCtx.textAlign = "center";
 	lines.forEach((line, i) => {
@@ -711,6 +682,7 @@ function drawMemoryPopup() {
 	fogCtx.textAlign = "left";
 	fogCtx.restore();
 }
+
 function checkDestination() {
 	if (gameState !== "exploring" || destinationReached) return;
 	if (isDisplayingMemory || memoryQueue.length > 0) return;
