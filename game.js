@@ -80,8 +80,9 @@ function resizeGame() {
 	fogCanvas.style.height = GAME_H + "px";
 
 	// Normalize context scales back to logical units
-	ctx.scale(dpr, dpr);
-	fogCtx.scale(dpr, dpr);
+	// Use setTransform (not scale) to prevent compounding on every resize call
+	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+	fogCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
 	container.style.width = W + "px";
 	container.style.height = H + "px";
@@ -185,6 +186,8 @@ function draw() {
 
 	if (pathQueue.length > 0) {
 		const next = pathQueue[0];
+		ctx.save();
+		applyCameraTransform(ctx);
 		ctx.fillStyle = "rgba(255, 255, 0, 0.5)";
 		ctx.beginPath();
 		ctx.arc(
@@ -195,6 +198,7 @@ function draw() {
 			Math.PI * 2,
 		);
 		ctx.fill();
+		ctx.restore();
 	}
 }
 
@@ -625,7 +629,7 @@ function updateWings() {
 			player.hasWings = true;
 
 			// Put the wing notification into the safe message queue
-			queueMessage("Wings collected! You can fly!");
+			queueMessage(STORY_WINGS_LINES);
 		} else {
 			// Only queue the reminder if there isn't a message currently active or queued
 			if (!isDisplayingMemory && memoryQueue.length === 0) {
@@ -846,7 +850,9 @@ function checkDestination() {
 			destinationReached = true;
 			gameState = "digging";
 			startRevealSequence();
-		} else {
+		} else if (!isDisplayingMemory && memoryQueue.length === 0) {
+			// Only queue the "collect memories first" message if nothing else is queued,
+			// preventing it from firing every frame the player stands on the tile
 			queueMessage(STORY_COLLECT_FIRST);
 		}
 	}
@@ -1077,7 +1083,7 @@ function backToIsland() {
 
 	// 4. RESET AND PLAY EXPLORATION MUSIC
 	if (audio.explore) {
-		audio.explore.volume = 1.0; // Bring volume back to max
+		audio.explore.volume = 0.4; // Restore to correct volume (matches audioManager.js)
 		audio.explore.currentTime = 0; // Start the island vibe fresh
 		audio.explore
 			.play()

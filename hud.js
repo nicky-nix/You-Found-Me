@@ -340,7 +340,8 @@ function drawProgressHeart() {
 	let dx = player.x - destination.x;
 	let dy = player.y - destination.y;
 	let dist = Math.sqrt(dx * dx + dy * dy);
-	let targetPct = 1 - Math.min(dist / 450, 1);
+	// Max distance = spawn (row 64) to destination (row 3) ≈ 61 rows × 32px = 1952px
+	let targetPct = 1 - Math.min(dist / 1952, 1);
 	smoothHeartPct += (targetPct - smoothHeartPct) * 0.1;
 	let pct = smoothHeartPct;
 
