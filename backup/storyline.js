@@ -16,7 +16,7 @@ const STORY_INTRO_LINES = [
 	"She left a letter.\nAnd inside it — a map.",
 
 	// Screen 6 — coordinates
-	"X: 48,  Z: -3\n\nIf you ever loved me...\nfind me.",
+	"X: 150,  Z: -300\n\nIf you ever loved me...\nfind me.",
 
 	// Screen 7 — prompt
 	"[ tap or press any key\nto set sail ]",
@@ -24,28 +24,28 @@ const STORY_INTRO_LINES = [
 
 // ── MEMORY FRAGMENT LOCATIONS ────────────────────────────────────────────────
 //
-//  New map layout (70 rows × 90 cols, TILE_SIZE = 32):
+//  The new map layout (70 rows × 90 cols, TILE_SIZE = 32):
 //
-//  Fragment 1 — South ruins wide path (row 52, col 30)
-//               First memory the player is likely to find, on the large ruins corridor.
+//  Fragment 1 — Southern ruins near beach (row 56, col 44)
+//               First memory the player is likely to find, in the south ruins.
 //
-//  Fragment 2 — West forest path (row 36, col 18)
-//               Hidden along the western forest clearing corridor.
+//  Fragment 2 — Mid-forest clearing near river south bank (row 35, col 20)
+//               Hidden in the overgrown western forest corridor.
 //
-//  Fragment 3 — East mid-forest path (row 39, col 50)
-//               Deep in the forest, along the eastern path.
+//  Fragment 3 — Forest path midpoint, east corridor (row 44, col 55)
+//               Deep in the forest belly, just before the ruins outpost.
 //
-//  Fragment 4 — North path approach (row 15, col 22)
-//               Very close to the top island — nearly there.
+//  Fragment 4 — North ruins courtyard, just south of island (row 13, col 44)
+//               The last memory, very close to her island.
 //
 // ────────────────────────────────────────────────────────────────────────────
 
 const STORY_MEMORIES = [
-	// ── Fragment 1 · South ruins path (row 52, col 30) ────────────
+	// ── Fragment 1 · South ruins (row 56, col 44) ────────────
 	{
 		label: "Fragment 1 — The Ruined Shore",
-		worldX: 30 * 32 + 16,
-		worldY: 52 * 32 + 16,
+		worldX: 44 * 32 + 16,
+		worldY: 56 * 32 + 16,
 		lines: [
 			"I still remember the first time",
 			"I noticed you.",
@@ -56,11 +56,11 @@ const STORY_MEMORIES = [
 		],
 	},
 
-	// ── Fragment 2 · West forest path (row 36, col 18) ──
+	// ── Fragment 2 · River south bank, west forest (row 35, col 20) ──
 	{
 		label: "Fragment 2 — The Overgrown Path",
-		worldX: 18 * 32 + 16,
-		worldY: 36 * 32 + 16,
+		worldX: 20 * 32 + 16,
+		worldY: 35 * 32 + 16,
 		lines: [
 			"There were afternoons",
 			"we didn't say anything at all.",
@@ -70,11 +70,11 @@ const STORY_MEMORIES = [
 		],
 	},
 
-	// ── Fragment 3 · East mid-forest path (row 39, col 50) ──
+	// ── Fragment 3 · Deep forest east path (row 44, col 55) ──
 	{
 		label: "Fragment 3 — The Dark Trees",
-		worldX: 50 * 32 + 16,
-		worldY: 39 * 32 + 16,
+		worldX: 55 * 32 + 16,
+		worldY: 44 * 32 + 16,
 		lines: [
 			"I used to call you at 2am",
 			"just to hear your voice.",
@@ -83,11 +83,11 @@ const STORY_MEMORIES = [
 		],
 	},
 
-	// ── Fragment 4 · North path approach (row 15, col 22) ──
+	// ── Fragment 4 · North ruins courtyard (row 13, col 44) ──
 	{
 		label: "Fragment 4 — The Old Courtyard",
-		worldX: 22 * 32 + 16,
-		worldY: 15 * 32 + 16,
+		worldX: 44 * 32 + 16,
+		worldY: 13 * 32 + 16,
 		lines: ["You're close now.", "I can feel it.", "I always could."],
 	},
 ];
@@ -107,7 +107,6 @@ const STORY_COLLECT_FIRST = [
 
 // ─── THE LETTER ─────────────────────────────────────────────────
 const STORY_LETTER = `To Hyacinth,
-
 
 the way I once found you.
 

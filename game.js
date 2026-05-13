@@ -81,7 +81,7 @@ function update() {
 	if (gameState === "exploring") {
 		updatePlayer();
 		updateCamera();
-		//updateWings();
+		updateWings();
 		updateMemories();
 		updateParticles();
 		checkDestination();
@@ -97,7 +97,7 @@ function update() {
 
 function updateCamera() {
 	const isMobile = window.innerWidth < 700;
-	camera.zoom = isMobile ? 1.7 : 1;
+	camera.zoom = isMobile ? 1 : 1;
 
 	const worldW = map[0].length * TILE_SIZE;
 	const worldH = map.length * TILE_SIZE;
@@ -150,7 +150,7 @@ function draw() {
 		ctx.save();
 		applyCameraTransform(ctx);
 		drawMap();
-		//drawWings();
+		drawWings();
 		drawPlayer();
 		drawParticles();
 		drawMemoryMarkers();
@@ -170,39 +170,6 @@ function gameLoop() {
 	requestAnimationFrame(gameLoop);
 }
 
-// ─── MAP ─────────────────────────────────────────────────────
-const TILE_SIZE = 32;
-
-const map = [
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 1, 1, 1, 2, 2, 2, 1, 1, 3, 3, 3, 1, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0],
-	[0, 0, 1, 1, 4, 4, 4, 2, 2, 2, 1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0],
-	[0, 1, 1, 4, 4, 1, 4, 4, 2, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0],
-	[0, 1, 4, 4, 1, 1, 1, 4, 1, 1, 1, 4, 4, 4, 1, 1, 1, 1, 1, 3, 1, 1, 1, 0, 0],
-	[0, 1, 4, 1, 1, 3, 1, 4, 4, 4, 4, 4, 1, 4, 4, 1, 1, 1, 3, 3, 3, 1, 1, 0, 0],
-	[0, 1, 4, 1, 3, 3, 1, 1, 1, 1, 1, 1, 0, 1, 4, 4, 1, 1, 1, 3, 1, 1, 1, 0, 0],
-	[0, 1, 4, 4, 1, 1, 1, 2, 2, 1, 1, 0, 0, 1, 1, 4, 4, 1, 1, 1, 1, 1, 0, 0, 0],
-	[0, 0, 1, 4, 4, 1, 2, 2, 2, 2, 1, 0, 1, 1, 1, 1, 4, 1, 2, 2, 1, 1, 0, 0, 0],
-	[0, 0, 1, 1, 4, 1, 2, 2, 2, 2, 1, 0, 1, 1, 1, 1, 4, 2, 2, 2, 2, 1, 0, 0, 0],
-	[0, 0, 0, 1, 4, 4, 1, 2, 2, 1, 1, 0, 1, 1, 1, 4, 4, 2, 3, 3, 2, 1, 0, 0, 0],
-	[0, 0, 0, 1, 1, 4, 4, 1, 1, 1, 1, 0, 1, 1, 4, 4, 1, 2, 3, 3, 2, 1, 0, 0, 0],
-	[0, 0, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 2, 2, 2, 1, 0, 0, 0],
-	[0, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0],
-	[0, 1, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-	[0, 1, 1, 3, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-];
-
-const TILE_COLORS = {
-	0: "#1a5c7a",
-	1: "#4a7c3f",
-	2: "#2d5a1b",
-	3: "#6aaa50",
-	4: "#8a7a5c",
-};
-
 function drawMap() {
 	for (let row = 0; row < map.length; row++) {
 		for (let col = 0; col < map[row].length; col++) {
@@ -219,11 +186,11 @@ function drawMap() {
 
 // ─── PLAYER ──────────────────────────────────────────────────
 const player = {
-	x: 96,
-	y: 64,
+	x: 20 * 32 + 8, // col 20 — south beach path spawn
+	y: 64 * 32 + 8, // row 64 — beach spawn
 	width: 16,
 	height: 16,
-	speed: 2,
+	speed: 6,
 	color: "White",
 	hasWings: false,
 };
@@ -424,7 +391,13 @@ function drawIntro() {
 	ctx.fillStyle = "#050508";
 	ctx.fillRect(0, 0, GAME_W, GAME_H);
 
-	const fontPx = uiPx(11);
+	// Detect if the user is on PC (wider screens)
+	const isPC = window.innerWidth >= 700;
+
+	// Dynamic font size and line height based on device type
+	const fontPx = isPC ? uiPx(20) : uiPx(11); // 20px on PC, 11px on mobile
+	const lineStep = isPC ? uiPx(44) : uiPx(24); // Increased line spacing for PC
+
 	ctx.font = `${fontPx}px "Press Start 2P"`;
 	ctx.textAlign = "center";
 
@@ -437,7 +410,10 @@ function drawIntro() {
 	let highlightedLineIndices = new Set(); // Tracks which line index gets the yellow accent
 
 	// ─── AUTO-WRAP LONG LINES DYNAMICALLY ───
-	const maxTextWidth = GAME_W - uiPx(40); // 20px padding on each side
+	// Capped at 900px on PC so text doesn't stretch awkwardly across wide monitors
+	const maxTextWidth = isPC
+		? Math.min(GAME_W - uiPx(120), uiPx(900))
+		: GAME_W - uiPx(40);
 
 	structuralLines.forEach((structLine, structIndex) => {
 		const words = structLine.split(" ");
@@ -468,9 +444,8 @@ function drawIntro() {
 	});
 
 	// ─── RENDER BALANCED LINES TO VERTICAL CENTER ───
-	const lineStep = uiPx(24); // Slightly tighter spacing for multi-line wraps
 	const totalHeight = renderedLines.length * lineStep;
-	const startY = (GAME_H - totalHeight) / 2 + uiPx(12);
+	const startY = (GAME_H - totalHeight) / 2 + lineStep / 2; // Perfectly centers dynamically scaled text
 
 	renderedLines.forEach((line, i) => {
 		// Highlight the last original structural line group (e.g. tap prompt / accent lines) in gold
@@ -576,7 +551,13 @@ function drawTitleCard() {
 }
 
 // ─── WINGS ───────────────────────────────────────────────────
-const wings = { x: 160, y: 96, width: 16, height: 16, collected: false };
+const wings = {
+	x: 53 * 32 + 8,
+	y: 27 * 32 + 8,
+	width: 16,
+	height: 16,
+	collected: false,
+};
 
 function updateWings() {
 	if (wings.collected) return;
@@ -687,52 +668,67 @@ function drawMemoryMarkers() {
 function drawMemoryPopup() {
 	if (!activeMemory || memoryTimer <= 0) return;
 
+	// Detect if user is on PC (wider screen)
+	const isPC = window.innerWidth >= 700;
 	const alpha = Math.min(1, memoryTimer / 40);
 	const lines = activeMemory;
-	const padX = uiPx(20);
-	const padY = uiPx(12);
-	const lineH = uiPx(18);
-	const boxW = GAME_W - uiPx(40);
+
+	// Adaptive Font & Spacing (PC vs Mobile)
+	const fontSize = isPC ? uiPx(16) : uiPx(8); // 16px on PC, 8px on Mobile
+	const lineH = isPC ? uiPx(30) : uiPx(18); // Wider spacing on PC
+	const padX = isPC ? uiPx(40) : uiPx(20);
+	const padY = isPC ? uiPx(25) : uiPx(12);
+	const textYOffset = isPC ? uiPx(22) : uiPx(12); // Vertical alignment tweak
+
+	// Box dimensions: Constrain PC width so it doesn't span the entire screen
+	const boxW = isPC
+		? Math.min(GAME_W - uiPx(100), uiPx(750))
+		: GAME_W - uiPx(40);
 	const boxH = lines.length * lineH + padY * 2;
-	const boxX = (GAME_W - boxW) / 2; // centered horizontally
+	const boxX = (GAME_W - boxW) / 2;
 	const boxY = GAME_H - boxH - uiPx(50);
 
 	fogCtx.save();
 	fogCtx.globalAlpha = alpha;
+
+	// Draw Background Box
 	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
 	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(8));
+
+	// Draw Border
 	fogCtx.strokeStyle = "#ffd700";
 	fogCtx.lineWidth = uiPx(2);
 	fogCtx.stroke();
 
-	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
+	// Draw Text
+	fogCtx.font = `${fontSize}px "Press Start 2P"`;
 	fogCtx.fillStyle = "#fff8dc";
 	fogCtx.textAlign = "center";
 	lines.forEach((line, i) => {
-		fogCtx.fillText(line, GAME_W / 2, boxY + padY + uiPx(12) + i * lineH);
+		fogCtx.fillText(line, GAME_W / 2, boxY + padY + textYOffset + i * lineH);
 	});
+
 	fogCtx.textAlign = "left";
 	fogCtx.restore();
 }
-
-// ─── DESTINATION ─────────────────────────────────────────────
-const destination = {
-	x: 20 * TILE_SIZE + 16,
-	y: 15 * TILE_SIZE + 16,
-};
-
 function checkDestination() {
 	if (gameState !== "exploring" || destinationReached) return;
 	if (isDisplayingMemory || memoryQueue.length > 0) return;
 
-	const c = getGameCoords();
-	if (c.x === 20 && c.z === -15) {
+	// Use pixel-distance from destination so it works regardless of map layout
+	const px = player.x + player.width / 2;
+	const py = player.y + player.height / 2;
+	const dx = px - destination.x;
+	const dy = py - destination.y;
+	const dist = Math.sqrt(dx * dx + dy * dy);
+
+	if (dist < TILE_SIZE * 2) {
+		// within 2 tiles of the destination marker
 		if (areAllMemoriesCollected()) {
 			destinationReached = true;
 			gameState = "digging";
 			startRevealSequence();
 		} else {
-			// ─── CHANGED: Pass the story asset array cleanly into the unified queue ───
 			queueMessage(STORY_COLLECT_FIRST);
 		}
 	}
@@ -925,118 +921,6 @@ function typewriterEffect(text) {
 	}, 28);
 }
 
-function toggleReplyBox() {
-	// ─── ADD THIS: Play click sound ───
-	audio.click.currentTime = 0;
-	audio.click.play().catch(() => {});
-
-	const replyArea = document.getElementById("reply-area");
-	const replyBtn = document.getElementById("reply-btn");
-	const nameInput = document.getElementById("reply-name");
-	const messageInput = document.getElementById("reply-input");
-	const statusText = document.getElementById("reply-status");
-
-	if (replyArea.style.display === "none") {
-		replyArea.style.display = "block";
-		replyBtn.textContent = "🚀 Send Reply";
-		document.getElementById("parchment").scrollTop =
-			document.getElementById("parchment").scrollHeight;
-		nameInput.focus();
-	} else {
-		const nameValue = nameInput.value.trim();
-		const msgValue = messageInput.value.trim();
-
-		if (nameValue !== "" || msgValue !== "") {
-			if (nameValue === "") {
-				statusText.style.display = "block";
-				statusText.style.color = "#ff4444";
-				statusText.textContent = "Please enter your name! 🤍";
-				nameInput.focus();
-				return;
-			}
-			if (!nameValue.toLowerCase().includes("hyacinth")) {
-				statusText.style.display = "block";
-				statusText.style.color = "#ff4444";
-				statusText.textContent =
-					"This mailbox is reserved for my wifey only. Name mo po:>🔒";
-				nameInput.focus();
-				return;
-			}
-			if (msgValue === "") {
-				statusText.style.display = "block";
-				statusText.style.color = "#ff4444";
-				statusText.textContent = "Please type a message! 🌸";
-				messageInput.focus();
-				return;
-			}
-			sendReplyToDiscord(nameValue, msgValue);
-		} else {
-			replyArea.style.display = "none";
-			replyBtn.textContent = "✍️ Reply";
-			statusText.style.display = "none";
-		}
-	}
-}
-
-function sendReplyToDiscord(authorName, replyMessage) {
-	const statusText = document.getElementById("reply-status");
-	const replyBtn = document.getElementById("reply-btn");
-
-	statusText.style.display = "block";
-	statusText.style.color = "#ffd700";
-	statusText.textContent = "Sending via carrier pigeon... 🕊️";
-	replyBtn.disabled = true;
-
-	const discordWebhookUrl =
-		"https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
-
-	const payload = {
-		username: "Birb Delivery Island Service",
-		avatar_url: "https://i.imgur.com/vHco7O6.png",
-		embeds: [
-			{
-				description: `> 💖 **From Your Wifey:** \`${authorName}\`\n> ⏳ **Time:** <t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)\n\n🌸 ───────────────────────────── 🌸`,
-				title: `\n${replyMessage}\n`,
-				color: 16738740,
-				thumbnail: { url: "https://i.imgur.com/vHco7O6.png" },
-				footer: {
-					text: "Always Yours • You Found Me Engine",
-					icon_url: "https://i.imgur.com/vHco7O6.png",
-				},
-			},
-		],
-	};
-
-	fetch(discordWebhookUrl, {
-		method: "POST",
-		mode: "cors",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(payload),
-	})
-		.then((res) => {
-			if (res.ok || res.status === 204 || res.status === 200) {
-				statusText.style.color = "#6aaa50";
-				statusText.textContent = "Reply sent securely! ❤️";
-				document.getElementById("reply-name").value = "";
-				document.getElementById("reply-input").value = "";
-				setTimeout(() => {
-					document.getElementById("reply-area").style.display = "none";
-					replyBtn.textContent = "✍️ Reply";
-					replyBtn.disabled = false;
-					statusText.style.display = "none";
-				}, 3000);
-			} else {
-				throw new Error("Not OK");
-			}
-		})
-		.catch((err) => {
-			statusText.style.color = "#ff4444";
-			statusText.textContent = "Network error. Try again!";
-			replyBtn.disabled = false;
-			console.error("Webhook Error:", err);
-		});
-}
-
 function replayLetter() {
 	showLetter();
 }
@@ -1100,111 +984,6 @@ function spawnConfetti() {
 	).join("");
 	overlay.appendChild(confetti);
 	setTimeout(() => confetti.remove(), 4500);
-}
-
-// ─── AUDIO ───────────────────────────────────────────────────
-const audio = {
-	explore: new Audio("assets/audio/explore.mp3"),
-	reveal: new Audio("assets/audio/reveal.mp3"),
-	sealCrack: new Audio("assets/audio/sealopen.mp3"),
-	memoryFound: new Audio("assets/audio/memory.mp3"),
-	typeSound: new Audio("assets/audio/typing.mp3"),
-	click: {
-		currentTime: 0, // Keeps compatibility with your reset code
-		play: function () {
-			return new Promise((resolve) => {
-				const AudioCtx = window.AudioContext || window.webkitAudioContext;
-				if (!AudioCtx) return resolve();
-
-				const ctx = new AudioCtx();
-				const osc = ctx.createOscillator();
-				const gain = ctx.createGain();
-
-				osc.connect(gain);
-				gain.connect(ctx.destination);
-
-				// 'sine' is soft, 'square' or 'triangle' feels like an old GameBoy
-				osc.type = "triangle";
-
-				// Start high, slide down fast (creates a crisp "pop/click" sensation)
-				osc.frequency.setValueAtTime(800, ctx.currentTime);
-				osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.05);
-
-				// Quick fade out so it doesn't ring
-				gain.gain.setValueAtTime(0.2, ctx.currentTime);
-				gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-
-				osc.start();
-				osc.stop(ctx.currentTime + 0.06);
-				resolve();
-			});
-		},
-	},
-};
-audio.explore.loop = true;
-audio.explore.volume = 0.4;
-audio.reveal.loop = true;
-audio.reveal.volume = 0.5;
-audio.sealCrack.volume = 1;
-audio.typeSound.volume = 0.7;
-audio.memoryFound.volume = 0.5;
-
-if (audio.typeSound) {
-	audio.typeSound.loop = true;
-	audio.typeSound.volume = 0.3;
-}
-
-// --- FIXED AUDIO UNLOCK FOR MOBILE ---
-let musicStarted = false;
-function startMusic() {
-	if (musicStarted) return;
-	musicStarted = true;
-	audio.explore
-		.play()
-		.catch((err) => console.log("Audio playback blocked:", err));
-}
-
-window.addEventListener("pointerdown", startMusic, { once: true });
-window.addEventListener("keydown", startMusic, { once: true });
-
-function switchToRevealMusic() {
-	const fadeDuration = 2500; // Match the 2.5 second delay in startRevealSequence
-	const fadeInterval = 50; // Update volume every 50ms
-	const steps = fadeDuration / fadeInterval;
-	const volumeStep = 1 / steps;
-
-	// 1. Prepare the reveal music silently in the background
-	audio.reveal.volume = 0;
-	audio.reveal.play().catch((err) => console.log("Reveal music blocked:", err));
-
-	let currentStep = 0;
-
-	const crossfade = setInterval(() => {
-		currentStep++;
-
-		// ─── FADE OUT EXPLORE ───
-		if (audio.explore && !audio.explore.paused) {
-			audio.explore.volume = Math.max(0, audio.explore.volume - volumeStep);
-		}
-
-		// ─── FADE IN REVEAL ───
-		if (audio.reveal) {
-			audio.reveal.volume = Math.min(1, audio.reveal.volume + volumeStep);
-		}
-
-		// ─── CLEANUP WHEN FADE IS DONE ───
-		if (currentStep >= steps) {
-			clearInterval(crossfade);
-
-			if (audio.explore) {
-				audio.explore.pause();
-				audio.explore.currentTime = 0; // Reset track position
-			}
-
-			// Lock target volumes perfectly
-			audio.reveal.volume = 1;
-		}
-	}, fadeInterval);
 }
 
 // ─── JOYSTICK ────────────────────────────────────────────────

@@ -4,8 +4,9 @@ const ctx = canvas.getContext("2d");
 const fogCanvas = document.getElementById("fogCanvas");
 const fogCtx = fogCanvas.getContext("2d");
 
-const GAME_W = 800;
-const GAME_H = 600;
+let GAME_W = window.innerWidth;
+let GAME_H = window.innerHeight;
+let destinationReached = false; // This tracks if the final event already happened
 
 canvas.width = GAME_W;
 canvas.height = GAME_H;
@@ -41,16 +42,23 @@ const camera = {
 	zoom: 1,
 };
 
-// ─── RESPONSIVE RESIZE (NO TRANSFORMS) ──────────────────────
+// ─── RESPONSIVE RESIZE (FULL SCREEN FILL) ───────────────────
 function resizeGame() {
 	const container = document.getElementById("game-container");
-	const scaleX = window.innerWidth / GAME_W;
-	const scaleY = window.innerHeight / GAME_H;
-	const scale = Math.min(scaleX, scaleY, 1);
-	renderScale = scale || 1;
+	const W = window.innerWidth;
+	const H = window.innerHeight;
 
-	container.style.width = Math.max(1, Math.floor(GAME_W * scale)) + "px";
-	container.style.height = Math.max(1, Math.floor(GAME_H * scale)) + "px";
+	GAME_W = W;
+	GAME_H = H;
+	renderScale = 1;
+
+	canvas.width = GAME_W;
+	canvas.height = GAME_H;
+	fogCanvas.width = GAME_W;
+	fogCanvas.height = GAME_H;
+
+	container.style.width = W + "px";
+	container.style.height = H + "px";
 
 	if (joystickInstance && joystickInstance.destroy) {
 		joystickInstance.destroy();
@@ -65,13 +73,15 @@ resizeGame();
 
 // ─── GAME STATE ──────────────────────────────────────────────
 let gameState = "intro";
+let memoryQueue = []; // ─── ADD THIS: Holds waiting memories
+let isDisplayingMemory = false; // ─── ADD THIS: Tracks if a popup is active
 
 // ─── GAME LOOP ───────────────────────────────────────────────
 function update() {
 	if (gameState === "exploring") {
 		updatePlayer();
 		updateCamera();
-		updateWings();
+		//updateWings();
 		updateMemories();
 		updateParticles();
 		checkDestination();
@@ -87,7 +97,7 @@ function update() {
 
 function updateCamera() {
 	const isMobile = window.innerWidth < 700;
-	camera.zoom = isMobile ? 1.7 : 1;
+	camera.zoom = isMobile ? 1 : 1;
 
 	const worldW = map[0].length * TILE_SIZE;
 	const worldH = map.length * TILE_SIZE;
@@ -140,7 +150,7 @@ function draw() {
 		ctx.save();
 		applyCameraTransform(ctx);
 		drawMap();
-		drawWings();
+		//drawWings();
 		drawPlayer();
 		drawParticles();
 		drawMemoryMarkers();
@@ -160,39 +170,6 @@ function gameLoop() {
 	requestAnimationFrame(gameLoop);
 }
 
-// ─── MAP ─────────────────────────────────────────────────────
-const TILE_SIZE = 32;
-
-const map = [
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 1, 1, 1, 2, 2, 2, 1, 1, 3, 3, 3, 1, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0],
-	[0, 0, 1, 1, 4, 4, 4, 2, 2, 2, 1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0],
-	[0, 1, 1, 4, 4, 1, 4, 4, 2, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0],
-	[0, 1, 4, 4, 1, 1, 1, 4, 1, 1, 1, 4, 4, 4, 1, 1, 1, 1, 1, 3, 1, 1, 1, 0, 0],
-	[0, 1, 4, 1, 1, 3, 1, 4, 4, 4, 4, 4, 1, 4, 4, 1, 1, 1, 3, 3, 3, 1, 1, 0, 0],
-	[0, 1, 4, 1, 3, 3, 1, 1, 1, 1, 1, 1, 0, 1, 4, 4, 1, 1, 1, 3, 1, 1, 1, 0, 0],
-	[0, 1, 4, 4, 1, 1, 1, 2, 2, 1, 1, 0, 0, 1, 1, 4, 4, 1, 1, 1, 1, 1, 0, 0, 0],
-	[0, 0, 1, 4, 4, 1, 2, 2, 2, 2, 1, 0, 1, 1, 1, 1, 4, 1, 2, 2, 1, 1, 0, 0, 0],
-	[0, 0, 1, 1, 4, 1, 2, 2, 2, 2, 1, 0, 1, 1, 1, 1, 4, 2, 2, 2, 2, 1, 0, 0, 0],
-	[0, 0, 0, 1, 4, 4, 1, 2, 2, 1, 1, 0, 1, 1, 1, 4, 4, 2, 3, 3, 2, 1, 0, 0, 0],
-	[0, 0, 0, 1, 1, 4, 4, 1, 1, 1, 1, 0, 1, 1, 4, 4, 1, 2, 3, 3, 2, 1, 0, 0, 0],
-	[0, 0, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 2, 2, 2, 1, 0, 0, 0],
-	[0, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0],
-	[0, 1, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-	[0, 1, 1, 3, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-];
-
-const TILE_COLORS = {
-	0: "#1a5c7a",
-	1: "#4a7c3f",
-	2: "#2d5a1b",
-	3: "#6aaa50",
-	4: "#8a7a5c",
-};
-
 function drawMap() {
 	for (let row = 0; row < map.length; row++) {
 		for (let col = 0; col < map[row].length; col++) {
@@ -209,12 +186,12 @@ function drawMap() {
 
 // ─── PLAYER ──────────────────────────────────────────────────
 const player = {
-	x: 96,
-	y: 64,
+	x: 44 * 32 + 8, // col 44 — bottom-center beach spawn
+	y: 67 * 32 + 8, // row 67 — beach spawn
 	width: 16,
 	height: 16,
-	speed: 2,
-	color: "#ff69b4",
+	speed: 3.2,
+	color: "White",
 	hasWings: false,
 };
 
@@ -405,34 +382,67 @@ function roundRect(ctx, x, y, w, h, r) {
 
 // ─── INTRO ───────────────────────────────────────────────────
 let introStep = 0;
-const introLines = [
-	"There is a certain kind of lost\nthat has no map.",
-	"Not lost in a place.\nLost in yourself.",
-	"And then she walked back\ninto his life.",
-	"She left a letter.\nAnd inside it — a map.",
-	"X: 20,  Z: -15\n\nIf you ever loved me...\nfind me.",
-	"[ tap or press any key\nto set sail ]",
-];
+
+const introLines = STORY_INTRO_LINES;
+
 let lineStartTime = Date.now();
 
 function drawIntro() {
 	ctx.fillStyle = "#050508";
 	ctx.fillRect(0, 0, GAME_W, GAME_H);
 
-	const lines = introLines[introStep].split("\n");
+	const fontPx = uiPx(11);
+	ctx.font = `${fontPx}px "Press Start 2P"`;
 	ctx.textAlign = "center";
 
 	const alpha = Math.min(1, (Date.now() - lineStartTime) / 1000);
 	ctx.globalAlpha = alpha;
 
-	const fontPx = uiPx(11);
-	const lineStep = uiPx(28);
-	const topOffset = (lines.length - 1) * uiPx(14);
+	// Split by manual newlines first
+	const structuralLines = introLines[introStep].split("\n");
+	let renderedLines = [];
+	let highlightedLineIndices = new Set(); // Tracks which line index gets the yellow accent
 
-	lines.forEach((line, i) => {
-		ctx.font = `${fontPx}px "Press Start 2P"`;
-		ctx.fillStyle = i === lines.length - 1 ? "#ffd700" : "#e8e4d4";
-		ctx.fillText(line, GAME_W / 2, GAME_H / 2 - topOffset + i * lineStep);
+	// ─── AUTO-WRAP LONG LINES DYNAMICALLY ───
+	const maxTextWidth = GAME_W - uiPx(40); // 20px padding on each side
+
+	structuralLines.forEach((structLine, structIndex) => {
+		const words = structLine.split(" ");
+		let currentLine = "";
+
+		words.forEach((word) => {
+			let testLine = currentLine + (currentLine === "" ? "" : " ") + word;
+			let testWidth = ctx.measureText(testLine).width;
+
+			if (testWidth > maxTextWidth && currentLine !== "") {
+				renderedLines.push(currentLine);
+				// If the original chunk was the last structural string, maintain yellow highlight status
+				if (structIndex === structuralLines.length - 1) {
+					highlightedLineIndices.add(renderedLines.length - 1);
+				}
+				currentLine = word;
+			} else {
+				currentLine = testLine;
+			}
+		});
+
+		if (currentLine !== "") {
+			renderedLines.push(currentLine);
+			if (structIndex === structuralLines.length - 1) {
+				highlightedLineIndices.add(renderedLines.length - 1);
+			}
+		}
+	});
+
+	// ─── RENDER BALANCED LINES TO VERTICAL CENTER ───
+	const lineStep = uiPx(24); // Slightly tighter spacing for multi-line wraps
+	const totalHeight = renderedLines.length * lineStep;
+	const startY = (GAME_H - totalHeight) / 2 + uiPx(12);
+
+	renderedLines.forEach((line, i) => {
+		// Highlight the last original structural line group (e.g. tap prompt / accent lines) in gold
+		ctx.fillStyle = highlightedLineIndices.has(i) ? "#ffd700" : "#e8e4d4";
+		ctx.fillText(line, GAME_W / 2, startY + i * lineStep);
 	});
 
 	ctx.globalAlpha = 1;
@@ -455,6 +465,17 @@ window.addEventListener("keydown", (e) => {
 
 function advanceIntro() {
 	if (gameState !== "intro") return;
+
+	// ─── ADD THIS: Play click sound ───
+	audio.click.currentTime = 0;
+	audio.click.play().catch((err) => console.log("Click blocked:", err));
+
+	// FORCE PLAY HERE: Mobile browsers will allow it because this runs
+	// directly inside a user input event listener (click/keydown).
+	if (!musicStarted) {
+		startMusic();
+	}
+
 	introStep++;
 	if (introStep >= introLines.length) {
 		gameState = "title";
@@ -462,7 +483,6 @@ function advanceIntro() {
 	}
 	lineStartTime = Date.now();
 }
-
 // ─── TITLE CARD ──────────────────────────────────────────────
 let titleTimer = 0;
 
@@ -472,7 +492,12 @@ function updateTitle() {
 		gameState = "exploring";
 		titleTimer = 0;
 		updateCamera();
-		initJoystick(); // This is perfect!
+		initJoystick();
+
+		// Double check: Ensure exploration music starts right here!
+		audio.explore
+			.play()
+			.catch((err) => console.log("Explore music failed:", err));
 	}
 }
 
@@ -518,7 +543,13 @@ function drawTitleCard() {
 }
 
 // ─── WINGS ───────────────────────────────────────────────────
-const wings = { x: 160, y: 96, width: 16, height: 16, collected: false };
+const wings = {
+	x: 8 * 32 + 8,
+	y: 14 * 32 + 8,
+	width: 16,
+	height: 16,
+	collected: false,
+};
 
 function updateWings() {
 	if (wings.collected) return;
@@ -527,59 +558,41 @@ function updateWings() {
 	if (Math.sqrt(dx * dx + dy * dy) < 20) {
 		wings.collected = true;
 		player.hasWings = true;
-		showNotification("Wings collected! You can fly!");
+
+		// ─── UPDATED: Put the wing notification into the safe message queue ───
+		queueMessage("Wings collected! You can fly!");
 	}
 }
 
 function drawWings() {
 	if (wings.collected) return;
 	const bob = Math.sin(Date.now() / 300) * 3;
-	ctx.save();
+
+	ctx.save(); // 1. Saves current canvas state
+
+	// 2. Force full opacity for the wings asset
+	ctx.globalAlpha = 1.0;
+
+	// 3. Optional: Add a subtle neon magical glow to make them pop in the dark fog
+	ctx.shadowColor = "#fbff00ec";
+	ctx.shadowBlur = 10;
+
 	ctx.font = `${uiPx(18)}px serif`;
-	ctx.fillText("🪽", wings.x, wings.y + bob);
-	ctx.restore();
+
+	// 4. Fill text positions relative to world canvas coordinates
+	ctx.fillStyle = "#ffd900"; // Ensures text color fills fully
+	ctx.fillText("⭐", wings.x, wings.y + bob);
+
+	ctx.restore(); // 5. Restores canvas to pristine settings so it doesn't break other drawings
 }
 
 // ─── MEMORIES ────────────────────────────────────────────────
-const memories = [
-	{
-		x: 6 * TILE_SIZE + 16,
-		y: 3 * TILE_SIZE + 16,
-		collected: false,
-		text: [
-			"This is where I used to sit",
-			"and think about you.",
-			"Every single day.",
-		],
-	},
-	{
-		x: 12 * TILE_SIZE + 16,
-		y: 5 * TILE_SIZE + 16,
-		collected: false,
-		text: [
-			"I found this tree on my first day here.",
-			"I carved something into it.",
-			"I hoped you would find it.",
-		],
-	},
-	{
-		x: 3 * TILE_SIZE + 16,
-		y: 11 * TILE_SIZE + 16,
-		collected: false,
-		text: [
-			"I used to call you at 2am",
-			"just to hear your voice.",
-			"I still do it sometimes.",
-			"I just don't press call anymore.",
-		],
-	},
-	{
-		x: 14 * TILE_SIZE + 16,
-		y: 13 * TILE_SIZE + 16,
-		collected: false,
-		text: ["You're close now.", "I can feel it.", "I always could."],
-	},
-];
+const memories = STORY_MEMORIES.map((m) => ({
+	x: m.worldX,
+	y: m.worldY,
+	collected: false,
+	text: m.lines,
+}));
 
 let activeMemory = null;
 let memoryTimer = 0;
@@ -591,12 +604,43 @@ function updateMemories() {
 		const dy = player.y - mem.y;
 		if (Math.sqrt(dx * dx + dy * dy) < 24) {
 			mem.collected = true;
-			activeMemory = mem.text;
-			memoryTimer = 280;
+
+			audio.memoryFound.currentTime = 0;
+			audio.memoryFound
+				.play()
+				.catch((err) => console.log("Sound blocked:", err));
+
+			// ─── UPDATED: Send memory text array to the unified queue ───
+			queueMessage(mem.text);
 		}
 	});
-	if (memoryTimer > 0) memoryTimer--;
-	else activeMemory = null;
+
+	if (memoryTimer > 0) {
+		memoryTimer--;
+	} else if (isDisplayingMemory) {
+		// Box timer finished, reset flags and pull next item in line seamlessly
+		activeMemory = null;
+		isDisplayingMemory = false;
+		processNextMemory();
+	}
+}
+
+function queueMessage(messageData) {
+	// If it's a simple string notification, wrap it into an array format
+	if (typeof messageData === "string") {
+		memoryQueue.push([messageData]);
+	} else if (Array.isArray(messageData)) {
+		memoryQueue.push(messageData);
+	}
+	processNextMemory();
+}
+
+function processNextMemory() {
+	if (isDisplayingMemory || memoryQueue.length === 0) return;
+
+	isDisplayingMemory = true;
+	activeMemory = memoryQueue.shift();
+	memoryTimer = 240; // Displays each box for 240 frames (~4 seconds)
 }
 
 function drawMemoryMarkers() {
@@ -644,18 +688,26 @@ function drawMemoryPopup() {
 	fogCtx.restore();
 }
 
-// ─── DESTINATION ─────────────────────────────────────────────
-const destination = {
-	x: 20 * TILE_SIZE + 16,
-	y: 15 * TILE_SIZE + 16,
-};
-
 function checkDestination() {
-	if (gameState !== "exploring") return;
-	const c = getGameCoords();
-	if (c.x === 20 && c.z === -15) {
-		gameState = "digging";
-		startRevealSequence();
+	if (gameState !== "exploring" || destinationReached) return;
+	if (isDisplayingMemory || memoryQueue.length > 0) return;
+
+	// Use pixel-distance from destination so it works regardless of map layout
+	const px = player.x + player.width / 2;
+	const py = player.y + player.height / 2;
+	const dx = px - destination.x;
+	const dy = py - destination.y;
+	const dist = Math.sqrt(dx * dx + dy * dy);
+
+	if (dist < TILE_SIZE * 2) {
+		// within 2 tiles of the destination marker
+		if (areAllMemoriesCollected()) {
+			destinationReached = true;
+			gameState = "digging";
+			startRevealSequence();
+		} else {
+			queueMessage(STORY_COLLECT_FIRST);
+		}
 	}
 }
 
@@ -698,6 +750,9 @@ function drawParticles() {
 
 // ─── REVEAL SEQUENCE ─────────────────────────────────────────
 function startRevealSequence() {
+	// Start fading out the exploration track and fading in the reveal track IMMEDIATELY
+	switchToRevealMusic();
+
 	const burstInterval = setInterval(() => {
 		spawnParticles(destination.x, destination.y, 15);
 	}, 300);
@@ -705,7 +760,7 @@ function startRevealSequence() {
 	setTimeout(() => {
 		clearInterval(burstInterval);
 		gameState = "destination_reached";
-		switchToRevealMusic();
+		// switchToRevealMusic(); // <-- Removed from here so it finishes crossfading exactly now!
 		showEnvelope();
 	}, 2500);
 }
@@ -778,28 +833,7 @@ function showEnvelope() {
 }
 
 // ─── LETTER ──────────────────────────────────────────────────
-const letterContent = `To my wifey:>,
-
-
-I've been thinking about how to start this
-for a long time.
-
-And every time, I come back to the same truth:
-
-You found me first.
-
-I was lost 
-
-Thankyousm my wifey.
-For an amazing month.
-For being my person.
-For finding me —
-
-the way I once found you.
-
-
-               Always yours,
-                    — iweiwei21`;
+const letterContent = STORY_LETTER;
 
 function showLetter() {
 	const overlay = document.getElementById("ui-overlay");
@@ -834,6 +868,15 @@ function showLetter() {
 function typewriterEffect(text) {
 	const el = document.getElementById("letter-text");
 	let i = 0;
+
+	// 1. START SOUND IMMEDIATELY as writing begins
+	if (typeof audio !== "undefined" && audio.typeSound) {
+		audio.typeSound.currentTime = 0;
+		audio.typeSound
+			.play()
+			.catch((err) => console.log("Audio play blocked:", err));
+	}
+
 	const interval = setInterval(() => {
 		if (i < text.length) {
 			el.textContent += text[i];
@@ -842,118 +885,17 @@ function typewriterEffect(text) {
 			i++;
 		} else {
 			clearInterval(interval);
+
+			// 2. STOP SOUND IMMEDIATELY the exact millisecond writing ends
+			if (typeof audio !== "undefined" && audio.typeSound) {
+				audio.typeSound.pause();
+				audio.typeSound.currentTime = 0; // reset for next time
+			}
+
 			document.getElementById("letter-buttons").style.opacity = "1";
 			spawnConfetti();
 		}
 	}, 28);
-}
-
-function toggleReplyBox() {
-	const replyArea = document.getElementById("reply-area");
-	const replyBtn = document.getElementById("reply-btn");
-	const nameInput = document.getElementById("reply-name");
-	const messageInput = document.getElementById("reply-input");
-	const statusText = document.getElementById("reply-status");
-
-	if (replyArea.style.display === "none") {
-		replyArea.style.display = "block";
-		replyBtn.textContent = "🚀 Send Reply";
-		document.getElementById("parchment").scrollTop =
-			document.getElementById("parchment").scrollHeight;
-		nameInput.focus();
-	} else {
-		const nameValue = nameInput.value.trim();
-		const msgValue = messageInput.value.trim();
-
-		if (nameValue !== "" || msgValue !== "") {
-			if (nameValue === "") {
-				statusText.style.display = "block";
-				statusText.style.color = "#ff4444";
-				statusText.textContent = "Please enter your name! 🤍";
-				nameInput.focus();
-				return;
-			}
-			if (!nameValue.toLowerCase().includes("hyacinth")) {
-				statusText.style.display = "block";
-				statusText.style.color = "#ff4444";
-				statusText.textContent =
-					"This mailbox is reserved for my wifey only. Name mo po:>🔒";
-				nameInput.focus();
-				return;
-			}
-			if (msgValue === "") {
-				statusText.style.display = "block";
-				statusText.style.color = "#ff4444";
-				statusText.textContent = "Please type a message! 🌸";
-				messageInput.focus();
-				return;
-			}
-			sendReplyToDiscord(nameValue, msgValue);
-		} else {
-			replyArea.style.display = "none";
-			replyBtn.textContent = "✍️ Reply";
-			statusText.style.display = "none";
-		}
-	}
-}
-
-function sendReplyToDiscord(authorName, replyMessage) {
-	const statusText = document.getElementById("reply-status");
-	const replyBtn = document.getElementById("reply-btn");
-
-	statusText.style.display = "block";
-	statusText.style.color = "#ffd700";
-	statusText.textContent = "Sending via carrier pigeon... 🕊️";
-	replyBtn.disabled = true;
-
-	const discordWebhookUrl =
-		"https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
-
-	const payload = {
-		username: "Island Love Letters",
-		avatar_url: "https://i.imgur.com/vHco7O6.png",
-		embeds: [
-			{
-				description: `> 💖 **From Your Wifey:** \`${authorName}\`\n> ⏳ **Time:** <t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)\n\n🌸 ───────────────────────────── 🌸`,
-				title: `\n${replyMessage}\n`,
-				color: 16738740,
-				thumbnail: { url: "https://i.imgur.com/vHco7O6.png" },
-				footer: {
-					text: "Always Yours • You Found Me Engine",
-					icon_url: "https://i.imgur.com/vHco7O6.png",
-				},
-			},
-		],
-	};
-
-	fetch(discordWebhookUrl, {
-		method: "POST",
-		mode: "cors",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(payload),
-	})
-		.then((res) => {
-			if (res.ok || res.status === 204 || res.status === 200) {
-				statusText.style.color = "#6aaa50";
-				statusText.textContent = "Reply sent securely! ❤️";
-				document.getElementById("reply-name").value = "";
-				document.getElementById("reply-input").value = "";
-				setTimeout(() => {
-					document.getElementById("reply-area").style.display = "none";
-					replyBtn.textContent = "✍️ Reply";
-					replyBtn.disabled = false;
-					statusText.style.display = "none";
-				}, 3000);
-			} else {
-				throw new Error("Not OK");
-			}
-		})
-		.catch((err) => {
-			statusText.style.color = "#ff4444";
-			statusText.textContent = "Network error. Try again!";
-			replyBtn.disabled = false;
-			console.error("Webhook Error:", err);
-		});
 }
 
 function replayLetter() {
@@ -961,11 +903,46 @@ function replayLetter() {
 }
 
 function backToIsland() {
+	// ─── ADD THIS: Play click sound ───
+	audio.click.currentTime = 0;
+	audio.click.play().catch(() => {});
+
+	// 1. Switch game states back to exploration immediately
+	gameState = "exploring";
+	setJoystickEnabled(true);
+
+	// 2. Clear UI overlay
 	const overlay = document.getElementById("ui-overlay");
 	overlay.innerHTML = "";
 	overlay.style.pointerEvents = "none";
-	gameState = "exploring";
-	setJoystickEnabled(true);
+
+	// 3. SMOOTH FADE OUT FOR REVEAL MUSIC
+	if (audio.reveal && !audio.reveal.paused) {
+		const fadeDuration = 1000; // 1 second fade out
+		const fadeInterval = 50; // Update every 50ms
+		const steps = fadeDuration / fadeInterval;
+		const volumeStep = audio.reveal.volume / steps;
+
+		const fadeOutReveal = setInterval(() => {
+			if (audio.reveal.volume > volumeStep) {
+				audio.reveal.volume -= volumeStep;
+			} else {
+				// Fade finished: Clean up track completely
+				clearInterval(fadeOutReveal);
+				audio.reveal.pause();
+				audio.reveal.currentTime = 0;
+			}
+		}, fadeInterval);
+	}
+
+	// 4. RESET AND PLAY EXPLORATION MUSIC
+	if (audio.explore) {
+		audio.explore.volume = 1.0; // Bring volume back to max
+		audio.explore.currentTime = 0; // Start the island vibe fresh
+		audio.explore
+			.play()
+			.catch((err) => console.log("Explore music resume failed:", err));
+	}
 }
 
 function spawnConfetti() {
@@ -984,43 +961,6 @@ function spawnConfetti() {
 	).join("");
 	overlay.appendChild(confetti);
 	setTimeout(() => confetti.remove(), 4500);
-}
-
-// ─── AUDIO ───────────────────────────────────────────────────
-const audio = {
-	explore: new Audio("assets/audio/poopie pack/journey.wav"),
-	reveal: new Audio("assets/audio/poopie pack/blossom.wav"),
-	sealCrack: new Audio("assets/audio/poopie pack/start.wav"),
-	click: new Audio("assets/audio/poopie pack/yeahhhhh yuh.wav"),
-};
-audio.explore.loop = true;
-audio.explore.volume = 0.4;
-audio.reveal.loop = true;
-audio.reveal.volume = 0.5;
-
-// --- FIXED AUDIO UNLOCK FOR MOBILE ---
-let musicStarted = false;
-function startMusic() {
-	if (musicStarted) return;
-	musicStarted = true;
-	audio.explore
-		.play()
-		.catch((err) => console.log("Audio playback blocked:", err));
-}
-
-window.addEventListener("pointerdown", startMusic, { once: true });
-window.addEventListener("keydown", startMusic, { once: true });
-
-function switchToRevealMusic() {
-	audio.explore.pause();
-	audio.reveal.currentTime = 0;
-	audio.reveal.play().catch(() => {});
-}
-
-let isMuted = false;
-function toggleMute() {
-	isMuted = !isMuted;
-	Object.values(audio).forEach((a) => (a.muted = isMuted));
 }
 
 // ─── JOYSTICK ────────────────────────────────────────────────
@@ -1072,6 +1012,10 @@ function takeScreenshot() {
 	link.download = "you-found-me.png";
 	link.href = canvas.toDataURL("image/png");
 	link.click();
+}
+
+function areAllMemoriesCollected() {
+	return memories.every((mem) => mem.collected === true);
 }
 
 // ─── START ───────────────────────────────────────────────────
