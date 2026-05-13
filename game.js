@@ -1004,21 +1004,6 @@ function initJoystick() {
 	});
 }
 
-// ─── PROGRESS HEART ──────────────────────────────────────────
-function drawProgressHeart() {
-	const dx = player.x - destination.x;
-	const dy = player.y - destination.y;
-	const dist = Math.sqrt(dx * dx + dy * dy);
-	const pct = 1 - Math.min(dist / 450, 1);
-
-	fogCtx.font = `${uiPx(18)}px serif`;
-	fogCtx.globalAlpha = 0.3;
-	fogCtx.fillText("🤍", uiPx(10), uiPx(50));
-	fogCtx.globalAlpha = pct;
-	fogCtx.fillText("❤️", uiPx(10), uiPx(50));
-	fogCtx.globalAlpha = 1;
-}
-
 // ─── SCREENSHOT ──────────────────────────────────────────────
 function takeScreenshot() {
 	const link = document.createElement("a");
