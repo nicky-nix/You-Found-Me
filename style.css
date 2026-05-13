@@ -227,3 +227,23 @@ body {
 		opacity: 1;
 	}
 }
+
+/* --- BETTER JOYSTICK VISUALS FOR ANDROID --- */
+.joystick-base {
+	background: rgba(255, 215, 0, 0.25) !important;
+	border: 2px solid #ffd700 !important;
+	box-shadow: 0 0 15px rgba(255, 215, 0, 0.6) !important;
+	transition: all 0.05s linear;
+}
+
+.joystick .front {
+	background: #ffd700 !important;
+	box-shadow: 0 0 8px gold !important;
+	border: 1px solid rgba(255, 255, 200, 0.8) !important;
+}
+
+/* Force no scrolling/zooming inside joystick zone */
+#joystick-zone {
+	touch-action: none !important;
+	-webkit-tap-highlight-color: transparent;
+}

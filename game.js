@@ -7,6 +7,15 @@ const fogCtx = fogCanvas.getContext("2d");
 let GAME_W = window.innerWidth;
 let GAME_H = window.innerHeight;
 let destinationReached = false; // This tracks if the final event already happened
+let rawJoyX = 0,
+	rawJoyY = 0;
+let smoothJoyX = 0,
+	smoothJoyY = 0;
+let targetX = null,
+	targetY = null; // world coordinates of destination
+let pathQueue = []; // tiles to walk through (x, y)
+let isMovingToTarget = false;
+let movementHintShown = false;
 
 canvas.width = GAME_W;
 canvas.height = GAME_H;
@@ -14,12 +23,6 @@ fogCanvas.width = GAME_W;
 fogCanvas.height = GAME_H;
 
 const joystickZone = document.getElementById("joystick-zone");
-
-function setJoystickEnabled(enabled) {
-	joystickZone.style.pointerEvents = enabled ? "all" : "none";
-}
-
-setJoystickEnabled(false);
 
 let joyX = 0,
 	joyY = 0;
@@ -66,6 +69,7 @@ function resizeGame() {
 	// Set internal resolution scaled by DPR
 	canvas.width = GAME_W * dpr;
 	canvas.height = GAME_H * dpr;
+
 	// Keep CSS display size matching the logical layout dimensions
 	canvas.style.width = GAME_W + "px";
 	canvas.style.height = GAME_H + "px";
@@ -81,14 +85,6 @@ function resizeGame() {
 
 	container.style.width = W + "px";
 	container.style.height = H + "px";
-
-	if (joystickInstance && joystickInstance.destroy) {
-		joystickInstance.destroy();
-		joystickInstance = null;
-		joyX = 0;
-		joyY = 0;
-		initJoystick();
-	}
 }
 
 window.addEventListener("resize", resizeGame);
@@ -186,6 +182,20 @@ function draw() {
 			drawNotification();
 		}
 	}
+
+	if (pathQueue.length > 0) {
+		const next = pathQueue[0];
+		ctx.fillStyle = "rgba(255, 255, 0, 0.5)";
+		ctx.beginPath();
+		ctx.arc(
+			next.x + player.width / 2,
+			next.y + player.height / 2,
+			8,
+			0,
+			Math.PI * 2,
+		);
+		ctx.fill();
+	}
 }
 
 function gameLoop() {
@@ -237,6 +247,57 @@ function getTileAt(px, py) {
 	return map[row][col];
 }
 
+// ─── PATHFINDING (BFS) ─────────────────────────────────────
+function findPath(startCol, startRow, endCol, endRow) {
+	if (startCol === endCol && startRow === endRow) return [];
+
+	const queue = [{ col: startCol, row: startRow, path: [] }];
+	const visited = new Set();
+	visited.add(`${startCol},${startRow}`);
+
+	const dirs = [
+		[0, -1],
+		[1, 0],
+		[0, 1],
+		[-1, 0], // up, right, down, left
+	];
+
+	while (queue.length > 0) {
+		const { col, row, path } = queue.shift();
+
+		for (let [dx, dy] of dirs) {
+			const newCol = col + dx;
+			const newRow = row + dy;
+
+			if (newCol === endCol && newRow === endRow) {
+				return [...path, { col: newCol, row: newRow }];
+			}
+
+			const key = `${newCol},${newRow}`;
+			if (visited.has(key)) continue;
+
+			// Check bounds and collision
+			if (
+				newRow < 0 ||
+				newRow >= map.length ||
+				newCol < 0 ||
+				newCol >= map[0].length
+			)
+				continue;
+			const tile = map[newRow][newCol];
+			if (!player.hasWings && (tile === 0 || tile === 2)) continue;
+
+			visited.add(key);
+			queue.push({
+				col: newCol,
+				row: newRow,
+				path: [...path, { col: newCol, row: newRow }],
+			});
+		}
+	}
+	return null; // no path
+}
+
 function isSolid(tile) {
 	if (player.hasWings) return false;
 	return tile === 0 || tile === 2;
@@ -247,38 +308,68 @@ function updatePlayer() {
 		dy = 0;
 	const spd = player.hasWings ? player.speed * 3 : player.speed;
 
+	// Keyboard controls (always active)
 	if (keys["ArrowUp"] || keys["w"] || keys["W"]) dy -= spd;
 	if (keys["ArrowDown"] || keys["s"] || keys["S"]) dy += spd;
 	if (keys["ArrowLeft"] || keys["a"] || keys["A"]) dx -= spd;
 	if (keys["ArrowRight"] || keys["d"] || keys["D"]) dx += spd;
 
-	dx += joyX * spd;
-	dy += joyY * spd;
-
-	if (dx !== 0 && dy !== 0) {
-		dx *= 0.707;
-		dy *= 0.707;
+	// If any keyboard key is pressed, cancel auto-move
+	if (dx !== 0 || dy !== 0) {
+		isMovingToTarget = false;
+		pathQueue = [];
+		targetX = targetY = null;
 	}
 
-	const nextX = player.x + dx;
-	const nextY = player.y + dy;
+	// Auto-move toward next target in queue
+	if (isMovingToTarget && pathQueue.length > 0) {
+		const target = pathQueue[0];
+		const dxToTarget = target.x - player.x;
+		const dyToTarget = target.y - player.y;
+		const distance = Math.hypot(dxToTarget, dyToTarget);
 
-	if (
-		!isSolid(getTileAt(nextX, player.y)) &&
-		!isSolid(getTileAt(nextX + player.width, player.y)) &&
-		!isSolid(getTileAt(nextX, player.y + player.height)) &&
-		!isSolid(getTileAt(nextX + player.width, player.y + player.height))
-	) {
-		player.x = nextX;
+		if (distance < spd) {
+			// Reached this waypoint, pop it
+			player.x = target.x;
+			player.y = target.y;
+			pathQueue.shift();
+		} else {
+			// Move toward target
+			const angle = Math.atan2(dyToTarget, dxToTarget);
+			dx = Math.cos(angle) * spd;
+			dy = Math.sin(angle) * spd;
+		}
+	} else if (pathQueue.length === 0) {
+		isMovingToTarget = false;
 	}
 
-	if (
-		!isSolid(getTileAt(player.x, nextY)) &&
-		!isSolid(getTileAt(player.x + player.width, nextY)) &&
-		!isSolid(getTileAt(player.x, nextY + player.height)) &&
-		!isSolid(getTileAt(player.x + player.width, nextY + player.height))
-	) {
-		player.y = nextY;
+	// Apply movement (with collision)
+	if (dx !== 0 || dy !== 0) {
+		if (dx !== 0 && dy !== 0) {
+			dx *= 0.707;
+			dy *= 0.707;
+		}
+
+		const nextX = player.x + dx;
+		const nextY = player.y + dy;
+
+		if (
+			!isSolid(getTileAt(nextX, player.y)) &&
+			!isSolid(getTileAt(nextX + player.width, player.y)) &&
+			!isSolid(getTileAt(nextX, player.y + player.height)) &&
+			!isSolid(getTileAt(nextX + player.width, player.y + player.height))
+		) {
+			player.x = nextX;
+		}
+
+		if (
+			!isSolid(getTileAt(player.x, nextY)) &&
+			!isSolid(getTileAt(player.x + player.width, nextY)) &&
+			!isSolid(getTileAt(player.x, nextY + player.height)) &&
+			!isSolid(getTileAt(player.x + player.width, nextY + player.height))
+		) {
+			player.y = nextY;
+		}
 	}
 }
 
@@ -448,7 +539,6 @@ function updateTitle() {
 		gameState = "exploring";
 		titleTimer = 0;
 		updateCamera();
-		initJoystick();
 
 		// Double check: Ensure exploration music starts right here!
 		audio.explore
@@ -654,30 +744,26 @@ function drawMemoryMarkers() {
 function drawMemoryPopup() {
 	if (!activeMemory || memoryTimer <= 0) return;
 
-	// Detect if user is on PC (wider screen)
 	const isPC = window.innerWidth >= 700;
 	const alpha = Math.min(1, memoryTimer / 40);
 	const rawLines = activeMemory;
 
-	// Adaptive Font & Spacing (PC vs Mobile)
-	const fontSize = isPC ? uiPx(16) : uiPx(8); // 16px on PC, 8px on Mobile
-	const lineH = isPC ? uiPx(30) : uiPx(18); // Wider spacing on PC
+	const fontSize = isPC ? uiPx(16) : uiPx(9);
+	const lineH = isPC ? uiPx(30) : uiPx(20);
 	const padX = isPC ? uiPx(40) : uiPx(20);
 	const padY = isPC ? uiPx(25) : uiPx(12);
-	const textYOffset = isPC ? uiPx(22) : uiPx(12); // Vertical alignment tweak
+	const textYOffset = isPC ? uiPx(22) : uiPx(12);
 
-	// Box dimensions: Constrain PC width so it doesn't span the entire screen
 	const boxW = isPC
 		? Math.min(GAME_W - uiPx(100), uiPx(750))
 		: GAME_W - uiPx(40);
 
-	// Set the font early so we can measure text width accurately
 	fogCtx.save();
 	fogCtx.font = `${fontSize}px "Press Start 2P"`;
 
-	// ─── NEW: DYNAMIC TEXT WRAPPING ───
+	// Wrap lines
 	let lines = [];
-	const maxTextWidth = boxW - padX * 2; // Leave breathing room on the sides
+	const maxTextWidth = boxW - padX * 2;
 
 	rawLines.forEach((structLine) => {
 		const words = structLine.split(" ");
@@ -694,50 +780,47 @@ function drawMemoryPopup() {
 				currentLine = testLine;
 			}
 		});
-		if (currentLine !== "") {
-			lines.push(currentLine);
-		}
+		if (currentLine !== "") lines.push(currentLine);
 	});
 
-	// Recalculate Box Height dynamically based on wrapped line count!
 	const boxH = lines.length * lineH + padY * 2;
 	const boxX = Math.round((GAME_W - boxW) / 2);
 	const boxY = Math.round(GAME_H - boxH - uiPx(50));
 
 	fogCtx.globalAlpha = alpha;
 
-	// Draw Background Box
-	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
-	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(8));
+	// Light cream background
+	fogCtx.fillStyle = "rgba(255, 248, 225, 0.96)";
+	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(10));
 
-	// Draw Border — re-trace the path so stroke() has a valid target
-	fogCtx.strokeStyle = "#ffd700";
+	// Decorative border (soft coral + mint accent line)
+	fogCtx.strokeStyle = "#FFB7B2";
 	fogCtx.lineWidth = uiPx(2);
 	fogCtx.beginPath();
-	fogCtx.moveTo(boxX + uiPx(8), boxY);
-	fogCtx.lineTo(boxX + boxW - uiPx(8), boxY);
-	fogCtx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + uiPx(8));
-	fogCtx.lineTo(boxX + boxW, boxY + boxH - uiPx(8));
+	fogCtx.moveTo(boxX + uiPx(10), boxY);
+	fogCtx.lineTo(boxX + boxW - uiPx(10), boxY);
+	fogCtx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + uiPx(10));
+	fogCtx.lineTo(boxX + boxW, boxY + boxH - uiPx(10));
 	fogCtx.quadraticCurveTo(
 		boxX + boxW,
 		boxY + boxH,
-		boxX + boxW - uiPx(8),
+		boxX + boxW - uiPx(10),
 		boxY + boxH,
 	);
-	fogCtx.lineTo(boxX + uiPx(8), boxY + boxH);
-	fogCtx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - uiPx(8));
-	fogCtx.lineTo(boxX, boxY + uiPx(8));
-	fogCtx.quadraticCurveTo(boxX, boxY, boxX + uiPx(8), boxY);
+	fogCtx.lineTo(boxX + uiPx(10), boxY + boxH);
+	fogCtx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - uiPx(10));
+	fogCtx.lineTo(boxX, boxY + uiPx(10));
+	fogCtx.quadraticCurveTo(boxX, boxY, boxX + uiPx(10), boxY);
 	fogCtx.closePath();
 	fogCtx.stroke();
 
-	// Draw Text
-	fogCtx.fillStyle = "#fff8dc";
-	fogCtx.textAlign = "center";
+	// LEFT‑ALIGNED text inside the popup
+	fogCtx.fillStyle = "#2D3E50";
+	fogCtx.textAlign = "left";
 	lines.forEach((line, i) => {
 		fogCtx.fillText(
 			line,
-			Math.round(GAME_W / 2),
+			Math.round(boxX + padX),
 			Math.round(boxY + padY + textYOffset + i * lineH),
 		);
 	});
@@ -827,7 +910,6 @@ function startRevealSequence() {
 function showEnvelope() {
 	const overlay = document.getElementById("ui-overlay");
 	overlay.style.pointerEvents = "all";
-	setJoystickEnabled(false);
 	overlay.innerHTML = `
     <div id="envelope-container" style="
         display: flex;
@@ -895,7 +977,6 @@ const letterContent = STORY_LETTER;
 
 function showLetter() {
 	const overlay = document.getElementById("ui-overlay");
-	setJoystickEnabled(false);
 	overlay.innerHTML = `
         <div id="letter-container">
             <div id="parchment">
@@ -969,7 +1050,6 @@ function backToIsland() {
 
 	// 1. Switch game states back to exploration immediately
 	gameState = "exploring";
-	setJoystickEnabled(true);
 
 	// 2. Clear UI overlay
 	const overlay = document.getElementById("ui-overlay");
@@ -1023,34 +1103,6 @@ function spawnConfetti() {
 	setTimeout(() => confetti.remove(), 4500);
 }
 
-// ─── JOYSTICK ────────────────────────────────────────────────
-// ─── JOYSTICK INITIALIZATION ────────────────────────────────
-function initJoystick() {
-	// Simple check to ensure we are on a touch-capable device
-	if (!("ontouchstart" in window || navigator.maxTouchPoints > 0)) return;
-	if (joystickInstance) return;
-
-	setJoystickEnabled(true);
-	joystickInstance = nipplejs.create({
-		zone: document.getElementById("joystick-zone"), // CHANGE: Target joystick-zone directly
-		mode: "static",
-		position: { left: "15%", bottom: "18%" },
-		color: "rgba(255, 215, 0, 0.6)",
-		size: 90,
-	});
-
-	joystickInstance.on("move", (evt, data) => {
-		// NippleJS gives an inversion vector on Y-axis naturally, we normalize it here
-		joyX = data.vector.x;
-		joyY = -data.vector.y;
-	});
-
-	joystickInstance.on("end", () => {
-		joyX = 0;
-		joyY = 0;
-	});
-}
-
 // ─── SCREENSHOT ──────────────────────────────────────────────
 function takeScreenshot() {
 	const link = document.createElement("a");
@@ -1062,6 +1114,81 @@ function takeScreenshot() {
 function areAllMemoriesCollected() {
 	return memories.every((mem) => mem.collected === true);
 }
+
+// ─── TAP TO MOVE (ANDROID / TOUCH) ─────────────────────────
+function handleCanvasTap(e) {
+	if (gameState !== "exploring") return;
+	e.preventDefault();
+
+	// Get touch or mouse coordinates relative to canvas
+	let clientX, clientY;
+	if (e.touches) {
+		clientX = e.touches[0].clientX;
+		clientY = e.touches[0].clientY;
+	} else {
+		clientX = e.clientX;
+		clientY = e.clientY;
+	}
+
+	// Convert screen to world coordinates (account for camera zoom and translation)
+	const rect = canvas.getBoundingClientRect();
+	const screenX = (clientX - rect.left) * (canvas.width / rect.width);
+	const screenY = (clientY - rect.top) * (canvas.height / rect.height);
+
+	// Inverse camera transform
+	const invZoom = 1 / camera.zoom;
+	const worldX = (screenX - GAME_W / 2) * invZoom + camera.x;
+	const worldY = (screenY - GAME_H / 2) * invZoom + camera.y;
+
+	// Find which tile was tapped
+	const tileCol = Math.floor(worldX / TILE_SIZE);
+	const tileRow = Math.floor(worldY / TILE_SIZE);
+
+	// Validate tile bounds
+	if (
+		tileRow < 0 ||
+		tileRow >= map.length ||
+		tileCol < 0 ||
+		tileCol >= map[0].length
+	)
+		return;
+
+	// Don't move into solid tiles (unless player has wings)
+	const tile = map[tileRow][tileCol];
+	if (!player.hasWings && (tile === 0 || tile === 2)) {
+		if (!movementHintShown) {
+			showNotification("❌ Can't walk there – find wings to fly!");
+			movementHintShown = true;
+		} else {
+			showNotification("❌ Blocked");
+		}
+		return;
+	}
+
+	// Find path from player's current tile to target tile
+	const startCol = Math.floor(player.x / TILE_SIZE);
+	const startRow = Math.floor(player.y / TILE_SIZE);
+	const path = findPath(startCol, startRow, tileCol, tileRow);
+
+	if (path && path.length > 0) {
+		// Convert path tiles to world coordinates (center of each tile)
+		pathQueue = path.map((tile) => ({
+			x: tile.col * TILE_SIZE + TILE_SIZE / 2 - player.width / 2,
+			y: tile.row * TILE_SIZE + TILE_SIZE / 2 - player.height / 2,
+		}));
+		isMovingToTarget = true;
+		if (!movementHintShown) {
+			showNotification("🦶 Tap any tile – I'll walk there!");
+			movementHintShown = true;
+		}
+	} else {
+		showNotification("🚫 No path found");
+	}
+}
+
+// Attach event listeners
+canvas.addEventListener("touchstart", handleCanvasTap, { passive: false });
+canvas.addEventListener("mousedown", handleCanvasTap);
 
 // ─── START ───────────────────────────────────────────────────
 gameLoop();

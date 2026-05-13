@@ -46,6 +46,7 @@ const STORY_MEMORIES = [
 		label: "Fragment 1 — The Ruined Shore",
 		worldX: 30 * 32 + 16,
 		worldY: 52 * 32 + 16,
+
 		lines: [
 			"I still remember the first time",
 			"I noticed you.",
@@ -61,6 +62,7 @@ const STORY_MEMORIES = [
 		label: "Fragment 2 — The Overgrown Path",
 		worldX: 18 * 32 + 16,
 		worldY: 36 * 32 + 16,
+
 		lines: [
 			"There were afternoons",
 			"we didn't say anything at all.",
@@ -75,6 +77,7 @@ const STORY_MEMORIES = [
 		label: "Fragment 3 — The Dark Trees",
 		worldX: 50 * 32 + 16,
 		worldY: 39 * 32 + 16,
+
 		lines: [
 			"I used to call you at 2am",
 			"just to hear your voice.",
@@ -88,6 +91,7 @@ const STORY_MEMORIES = [
 		label: "Fragment 4 — The Old Courtyard",
 		worldX: 22 * 32 + 16,
 		worldY: 15 * 32 + 16,
+
 		lines: ["You're close now.", "I can feel it.", "I always could."],
 	},
 ];
