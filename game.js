@@ -394,8 +394,10 @@ function advanceIntro() {
 	if (gameState !== "intro") return;
 
 	// ─── ADD THIS: Play click sound ───
-	audio.click.currentTime = 0;
-	audio.click.play().catch((err) => console.log("Click blocked:", err));
+	if (typeof audio !== "undefined" && audio.click) {
+		audio.click.currentTime = 0;
+		audio.click.play().catch((err) => console.log("Click blocked:", err));
+	}
 
 	// FORCE PLAY HERE: Mobile browsers will allow it because this runs
 	// directly inside a user input event listener (click/keydown).
@@ -530,12 +532,10 @@ const memories = STORY_MEMORIES.map((m) => ({
 	text: m.lines,
 }));
 
-memories.push({
-	x: 35 * 32 + 16, // Change 35 to whatever Tile X coordinate you want
-	y: 40 * 32 + 16, // Change 40 to whatever Tile Y coordinate you want
-	collected: false,
-	text: ["???"],
-});
+// BUG FIX: Removed hardcoded 5th mystery memory — it was placed on an impassable
+// forest tile (col 35, row 40 = tile type 2) making it impossible to collect,
+// which permanently prevented areAllMemoriesCollected() from returning true
+// and softlocked wings pickup and the ending. Add extra memories in storyline.js.
 
 let activeMemory = null;
 let memoryTimer = 0;
@@ -667,9 +667,25 @@ function drawMemoryPopup() {
 	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
 	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(8));
 
-	// Draw Border
+	// Draw Border — re-trace the path so stroke() has a valid target
 	fogCtx.strokeStyle = "#ffd700";
 	fogCtx.lineWidth = uiPx(2);
+	fogCtx.beginPath();
+	fogCtx.moveTo(boxX + uiPx(8), boxY);
+	fogCtx.lineTo(boxX + boxW - uiPx(8), boxY);
+	fogCtx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + uiPx(8));
+	fogCtx.lineTo(boxX + boxW, boxY + boxH - uiPx(8));
+	fogCtx.quadraticCurveTo(
+		boxX + boxW,
+		boxY + boxH,
+		boxX + boxW - uiPx(8),
+		boxY + boxH,
+	);
+	fogCtx.lineTo(boxX + uiPx(8), boxY + boxH);
+	fogCtx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - uiPx(8));
+	fogCtx.lineTo(boxX, boxY + uiPx(8));
+	fogCtx.quadraticCurveTo(boxX, boxY, boxX + uiPx(8), boxY);
+	fogCtx.closePath();
 	fogCtx.stroke();
 
 	// Draw Text
@@ -899,8 +915,10 @@ function replayLetter() {
 
 function backToIsland() {
 	// ─── ADD THIS: Play click sound ───
-	audio.click.currentTime = 0;
-	audio.click.play().catch(() => {});
+	if (typeof audio !== "undefined" && audio.click) {
+		audio.click.currentTime = 0;
+		audio.click.play().catch(() => {});
+	}
 
 	// 1. Switch game states back to exploration immediately
 	gameState = "exploring";

@@ -46,7 +46,7 @@ const destination = {
 // Spawn: Col 44, Row 67 (Beach)
 // Destination: Col 44, Row 3 (Top-center island)
 
-ap = [
+const map = [
 	// Top of map — north water
 	[
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
