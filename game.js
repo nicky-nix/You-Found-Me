@@ -51,20 +51,33 @@ function resizeGame() {
 	GAME_W = W;
 	GAME_H = H;
 
-	// Calculate baseline aspect ratio scaling
+	// Calculate baseline resolution scaling factor
 	const baselineW = 1280;
 	const baselineH = 720;
 	const scaleX = W / baselineW;
 	const scaleY = H / baselineH;
 
-	// Math.min protects UI bounds on extreme portrait/landscape ratios
-	// Clamp prevents UI elements from becoming overly microscopic or massive
+	// Using Math.min prevents the UI from expanding beyond boundary boxes on extreme aspect ratios
 	renderScale = Math.max(0.65, Math.min(1.35, Math.min(scaleX, scaleY)));
 
-	canvas.width = GAME_W;
-	canvas.height = GAME_H;
-	fogCanvas.width = GAME_W;
-	fogCanvas.height = GAME_H;
+	// Handle High-DPI screens (Retina / Android Displays)
+	const dpr = window.devicePixelRatio || 1;
+
+	// Set internal resolution scaled by DPR
+	canvas.width = GAME_W * dpr;
+	canvas.height = GAME_H * dpr;
+	// Keep CSS display size matching the logical layout dimensions
+	canvas.style.width = GAME_W + "px";
+	canvas.style.height = GAME_H + "px";
+
+	fogCanvas.width = GAME_W * dpr;
+	fogCanvas.height = GAME_H * dpr;
+	fogCanvas.style.width = GAME_W + "px";
+	fogCanvas.style.height = GAME_H + "px";
+
+	// Normalize context scales back to logical units
+	ctx.scale(dpr, dpr);
+	fogCtx.scale(dpr, dpr);
 
 	container.style.width = W + "px";
 	container.style.height = H + "px";
@@ -122,13 +135,14 @@ function updateCamera() {
 }
 
 function applyCameraTransform(targetCtx) {
+	const dpr = window.devicePixelRatio || 1;
 	targetCtx.setTransform(
-		camera.zoom,
+		camera.zoom * dpr,
 		0,
 		0,
-		camera.zoom,
-		GAME_W / 2 - camera.x * camera.zoom,
-		GAME_H / 2 - camera.y * camera.zoom,
+		camera.zoom * dpr,
+		Math.round((GAME_W / 2 - camera.x * camera.zoom) * dpr),
+		Math.round((GAME_H / 2 - camera.y * camera.zoom) * dpr),
 	);
 }
 
@@ -374,12 +388,15 @@ function drawIntro() {
 
 	// ─── RENDER BALANCED LINES TO VERTICAL CENTER ───
 	const totalHeight = renderedLines.length * lineStep;
-	const startY = (GAME_H - totalHeight) / 2 + lineStep / 2; // Perfectly centers dynamically scaled text
+	const startY = Math.round((GAME_H - totalHeight) / 2 + lineStep / 2); // Snap to integer pixels
 
 	renderedLines.forEach((line, i) => {
-		// Highlight the last original structural line group (e.g. tap prompt / accent lines) in gold
 		ctx.fillStyle = highlightedLineIndices.has(i) ? "#ffd700" : "#e8e4d4";
-		ctx.fillText(line, GAME_W / 2, startY + i * lineStep);
+		ctx.fillText(
+			line,
+			Math.round(GAME_W / 2),
+			Math.round(startY + i * lineStep),
+		); // Round horizontal & vertical placements
 	});
 
 	ctx.globalAlpha = 1;
@@ -456,7 +473,11 @@ function drawTitleCard() {
 	ctx.shadowBlur = 20;
 	ctx.shadowOffsetX = 0;
 	ctx.shadowOffsetY = 8;
-	ctx.fillText("💌", GAME_W / 2, GAME_H / 2 - uiPx(50) + floatOffset);
+	ctx.fillText(
+		"💌",
+		Math.round(GAME_W / 2),
+		Math.round(GAME_H / 2 - uiPx(50) + floatOffset),
+	);
 
 	ctx.shadowBlur = 0;
 	ctx.shadowOffsetY = 0;
@@ -467,16 +488,28 @@ function drawTitleCard() {
 	ctx.shadowColor = "#ffd700";
 	ctx.shadowBlur = 15;
 	ctx.fillStyle = "#ff8c00";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + uiPx(50));
+	ctx.fillText(
+		"YOU FOUND ME",
+		Math.round(GAME_W / 2),
+		Math.round(GAME_H / 2 + uiPx(50)),
+	);
 
 	ctx.shadowBlur = 0;
 	ctx.fillStyle = "#ffd700";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + uiPx(50));
+	ctx.fillText(
+		"YOU FOUND ME",
+		Math.round(GAME_W / 2),
+		Math.round(GAME_H / 2 + uiPx(50)),
+	);
 
 	ctx.font = `${uiPx(8)}px "Press Start 2P"`;
 	ctx.globalAlpha = 0.4 + Math.abs(Math.sin(time / 600)) * 0.4;
 	ctx.fillStyle = "#8a7a5c";
-	ctx.fillText("charting island coordinates...", GAME_W / 2, GAME_H - uiPx(60));
+	ctx.fillText(
+		"charting island coordinates...",
+		Math.round(GAME_W / 2),
+		Math.round(GAME_H - uiPx(60)),
+	);
 
 	ctx.restore();
 }
@@ -668,8 +701,8 @@ function drawMemoryPopup() {
 
 	// Recalculate Box Height dynamically based on wrapped line count!
 	const boxH = lines.length * lineH + padY * 2;
-	const boxX = (GAME_W - boxW) / 2;
-	const boxY = GAME_H - boxH - uiPx(50);
+	const boxX = Math.round((GAME_W - boxW) / 2);
+	const boxY = Math.round(GAME_H - boxH - uiPx(50));
 
 	fogCtx.globalAlpha = alpha;
 
@@ -702,7 +735,11 @@ function drawMemoryPopup() {
 	fogCtx.fillStyle = "#fff8dc";
 	fogCtx.textAlign = "center";
 	lines.forEach((line, i) => {
-		fogCtx.fillText(line, GAME_W / 2, boxY + padY + textYOffset + i * lineH);
+		fogCtx.fillText(
+			line,
+			Math.round(GAME_W / 2),
+			Math.round(boxY + padY + textYOffset + i * lineH),
+		);
 	});
 
 	fogCtx.textAlign = "left";

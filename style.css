@@ -56,7 +56,7 @@ body {
 
 /* --- FIXED JOYSTICK ZONE --- */
 #joystick-zone {
-	opacity: 0;
+	/*opacity: 0;*/
 	/* Ensure it still covers the area you want for touch controls */
 	background: transparent;
 	position: absolute;
