@@ -252,51 +252,61 @@ function getTileAt(px, py) {
 }
 
 // ─── PATHFINDING (BFS) ─────────────────────────────────────
+function isWalkable(col, row) {
+	if (row < 0 || row >= map.length || col < 0 || col >= map[0].length)
+		return false;
+	if (player.hasWings) return true;
+	const tile = map[row][col];
+	return tile !== 0 && tile !== 2;
+}
+
 function findPath(startCol, startRow, endCol, endRow) {
+	// Same tile — no movement needed
 	if (startCol === endCol && startRow === endRow) return [];
+
+	// Destination must be walkable
+	if (!isWalkable(endCol, endRow)) return null;
 
 	const queue = [{ col: startCol, row: startRow, path: [] }];
 	const visited = new Set();
 	visited.add(`${startCol},${startRow}`);
 
+	// 8-directional movement so diagonal paths work naturally
 	const dirs = [
 		[0, -1],
 		[1, 0],
 		[0, 1],
-		[-1, 0], // up, right, down, left
+		[-1, 0], // cardinal
+		[1, -1],
+		[1, 1],
+		[-1, 1],
+		[-1, -1], // diagonal
 	];
 
 	while (queue.length > 0) {
 		const { col, row, path } = queue.shift();
 
-		for (let [dx, dy] of dirs) {
-			const newCol = col + dx;
-			const newRow = row + dy;
+		for (const [dc, dr] of dirs) {
+			const newCol = col + dc;
+			const newRow = row + dr;
 
-			if (newCol === endCol && newRow === endRow) {
-				return [...path, { col: newCol, row: newRow }];
+			if (!isWalkable(newCol, newRow)) continue;
+
+			// For diagonal steps, both orthogonal neighbours must also be walkable
+			// (prevents cutting corners through solid tile edges)
+			if (dc !== 0 && dr !== 0) {
+				if (!isWalkable(col + dc, row) || !isWalkable(col, row + dr)) continue;
 			}
 
 			const key = `${newCol},${newRow}`;
 			if (visited.has(key)) continue;
-
-			// Check bounds and collision
-			if (
-				newRow < 0 ||
-				newRow >= map.length ||
-				newCol < 0 ||
-				newCol >= map[0].length
-			)
-				continue;
-			const tile = map[newRow][newCol];
-			if (!player.hasWings && (tile === 0 || tile === 2)) continue;
-
 			visited.add(key);
-			queue.push({
-				col: newCol,
-				row: newRow,
-				path: [...path, { col: newCol, row: newRow }],
-			});
+
+			const newPath = [...path, { col: newCol, row: newRow }];
+
+			if (newCol === endCol && newRow === endRow) return newPath;
+
+			queue.push({ col: newCol, row: newRow, path: newPath });
 		}
 	}
 	return null; // no path
@@ -332,18 +342,22 @@ function updatePlayer() {
 		const dyToTarget = target.y - player.y;
 		const distance = Math.hypot(dxToTarget, dyToTarget);
 
-		if (distance < spd) {
-			// Reached this waypoint, pop it
+		// Snap threshold: half a tile so we never overshoot and oscillate
+		if (distance <= TILE_SIZE / 2) {
 			player.x = target.x;
 			player.y = target.y;
 			pathQueue.shift();
+			if (pathQueue.length === 0) isMovingToTarget = false;
 		} else {
-			// Move toward target
-			const angle = Math.atan2(dyToTarget, dxToTarget);
-			dx = Math.cos(angle) * spd;
-			dy = Math.sin(angle) * spd;
+			// Move toward waypoint — skip the collision system so BFS-verified
+			// waypoints are always reachable (collision already baked into BFS)
+			const norm = spd / distance;
+			player.x += dxToTarget * norm;
+			player.y += dyToTarget * norm;
 		}
-	} else if (pathQueue.length === 0) {
+		// Auto-move provides its own dx/dy — skip the keyboard movement block below
+		return;
+	} else if (!isMovingToTarget || pathQueue.length === 0) {
 		isMovingToTarget = false;
 	}
 
@@ -1126,25 +1140,30 @@ function handleCanvasTap(e) {
 	if (gameState !== "exploring") return;
 	e.preventDefault();
 
-	// Get touch or mouse coordinates relative to canvas
+	// Get touch or mouse coordinates
 	let clientX, clientY;
-	if (e.touches) {
+	if (e.touches && e.touches.length > 0) {
 		clientX = e.touches[0].clientX;
 		clientY = e.touches[0].clientY;
+	} else if (e.changedTouches && e.changedTouches.length > 0) {
+		clientX = e.changedTouches[0].clientX;
+		clientY = e.changedTouches[0].clientY;
 	} else {
 		clientX = e.clientX;
 		clientY = e.clientY;
 	}
 
-	// Convert screen to world coordinates (account for camera zoom and translation)
+	// Convert CSS client coords → logical world coords.
+	// canvas.getBoundingClientRect() gives CSS (logical) size, so we work
+	// entirely in logical pixels — no DPR multiplication needed here.
 	const rect = canvas.getBoundingClientRect();
-	const screenX = (clientX - rect.left) * (canvas.width / rect.width);
-	const screenY = (clientY - rect.top) * (canvas.height / rect.height);
+	const logicalX = clientX - rect.left;
+	const logicalY = clientY - rect.top;
 
-	// Inverse camera transform
+	// Inverse camera transform (camera works in logical pixels)
 	const invZoom = 1 / camera.zoom;
-	const worldX = (screenX - GAME_W / 2) * invZoom + camera.x;
-	const worldY = (screenY - GAME_H / 2) * invZoom + camera.y;
+	const worldX = (logicalX - GAME_W / 2) * invZoom + camera.x;
+	const worldY = (logicalY - GAME_H / 2) * invZoom + camera.y;
 
 	// Find which tile was tapped
 	const tileCol = Math.floor(worldX / TILE_SIZE);
@@ -1159,9 +1178,8 @@ function handleCanvasTap(e) {
 	)
 		return;
 
-	// Don't move into solid tiles (unless player has wings)
-	const tile = map[tileRow][tileCol];
-	if (!player.hasWings && (tile === 0 || tile === 2)) {
+	// Don't pathfind into solid tiles
+	if (!isWalkable(tileCol, tileRow)) {
 		if (!movementHintShown) {
 			showNotification("❌ Can't walk there – find wings to fly!");
 			movementHintShown = true;
@@ -1171,16 +1189,19 @@ function handleCanvasTap(e) {
 		return;
 	}
 
-	// Find path from player's current tile to target tile
-	const startCol = Math.floor(player.x / TILE_SIZE);
-	const startRow = Math.floor(player.y / TILE_SIZE);
+	const startCol = Math.floor((player.x + player.width / 2) / TILE_SIZE);
+	const startRow = Math.floor((player.y + player.height / 2) / TILE_SIZE);
+
+	// Tapped own tile — nothing to do
+	if (startCol === tileCol && startRow === tileRow) return;
+
 	const path = findPath(startCol, startRow, tileCol, tileRow);
 
 	if (path && path.length > 0) {
-		// Convert path tiles to world coordinates (center of each tile)
-		pathQueue = path.map((tile) => ({
-			x: tile.col * TILE_SIZE + TILE_SIZE / 2 - player.width / 2,
-			y: tile.row * TILE_SIZE + TILE_SIZE / 2 - player.height / 2,
+		// Convert path tiles to world coordinates (centre of each tile, adjusted for player size)
+		pathQueue = path.map((step) => ({
+			x: step.col * TILE_SIZE + (TILE_SIZE - player.width) / 2,
+			y: step.row * TILE_SIZE + (TILE_SIZE - player.height) / 2,
 		}));
 		isMovingToTarget = true;
 		if (!movementHintShown) {
