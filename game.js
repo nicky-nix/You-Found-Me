@@ -243,7 +243,7 @@ const player = {
 	y: 64 * 32 + 8, // row 64 — beach spawn
 	width: 16,
 	height: 16,
-	speed: 3.7,
+	speed: 3,
 	color: "White",
 	hasWings: false,
 };
@@ -1084,6 +1084,11 @@ function replayLetter() {
 	showLetter();
 }
 
+// Add this variable near the top with other global declarations (e.g., after destinationReached)
+let islandReturnTimeout = null;
+let islandReturnSecondTimeout = null;
+
+// Then replace the existing backToIsland function with this enhanced version:
 function backToIsland() {
 	// ─── ADD THIS: Play click sound ───
 	if (typeof audio !== "undefined" && audio.click) {
@@ -1126,6 +1131,103 @@ function backToIsland() {
 			.play()
 			.catch((err) => console.log("Explore music resume failed:", err));
 	}
+
+	// ─── NEW FEATURE: PART TWO HINTS ─────────────────────────────
+	// Clear any previous pending hints to avoid stacking
+	if (islandReturnTimeout) clearTimeout(islandReturnTimeout);
+	if (islandReturnSecondTimeout) clearTimeout(islandReturnSecondTimeout);
+
+	// First hint after 5 seconds (only if still exploring)
+	// Inside backToIsland(), after restoring exploration music:
+
+	// First hint after 5 seconds – stays for 3 seconds (or adjust as you like)
+	// First hint after 5 seconds, visible for 3 seconds
+	islandReturnTimeout = setTimeout(() => {
+		if (gameState === "exploring") {
+			showCenteredNotification(
+				"✨ A strange energy lingers… Part Two is calling.",
+				7000,
+			);
+		}
+		islandReturnTimeout = null;
+	}, 10000);
+
+	// Second hint after 15 seconds, visible for 4 seconds
+	islandReturnSecondTimeout = setTimeout(() => {
+		if (gameState === "exploring") {
+			showCenteredNotification(
+				"💌 The waves whisper a secret… your journey is far from over.",
+				7000,
+			);
+		}
+		islandReturnSecondTimeout = null;
+	}, 15000);
+	// ─── END NEW FEATURE ─────────────────────────────────────────
+}
+
+let activeNotificationTimeout = null;
+
+function showCenteredNotification(message, durationMs = 3000) {
+	// Remove any existing notification
+	const oldNote = document.getElementById("custom-notification");
+	if (oldNote) oldNote.remove();
+	if (activeNotificationTimeout) clearTimeout(activeNotificationTimeout);
+
+	// Responsive font size: smaller on mobile
+	const isMobile = window.innerWidth <= 700;
+	const fontSize = isMobile ? "10px" : "14px"; // ← adjust these values
+	const paddingV = isMobile ? "8px" : "12px";
+	const paddingH = isMobile ? "12px" : "20px";
+
+	const note = document.createElement("div");
+	note.id = "custom-notification";
+	note.innerText = message;
+	note.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    backdrop-filter: blur(10px);
+    color: #ffd700;
+    font-family: 'Press Start 2P', monospace;
+    font-size: ${fontSize};
+    padding: ${paddingV} ${paddingH};
+    border-radius: 12px;
+    border: 1px solid #ffd700;
+    z-index: 10000;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 85vw;
+    pointer-events: none;
+    line-height: 1.5;
+    box-sizing: border-box;
+    animation: fadeInOut ${durationMs / 1000}s ease-in-out forwards;
+  `;
+
+	// Inject keyframe animation if not present
+	if (!document.querySelector("#notification-style")) {
+		const style = document.createElement("style");
+		style.id = "notification-style";
+		style.textContent = `
+      @keyframes fadeInOut {
+        0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+        15% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        85% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); visibility: hidden; }
+      }
+    `;
+		document.head.appendChild(style);
+	}
+
+	document.body.appendChild(note);
+
+	// Auto-remove after duration
+	activeNotificationTimeout = setTimeout(() => {
+		if (note && note.remove) note.remove();
+		activeNotificationTimeout = null;
+	}, durationMs);
 }
 
 function spawnConfetti() {
