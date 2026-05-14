@@ -75,7 +75,7 @@ audio.sealCrack.volume = 1;
 audio.typeSound.volume = 0.7;
 audio.memoryFound.volume = 0.5;
 audio.waves.loop = true;
-audio.waves.volume = 0.55; // slightly louder than explore to be audible
+audio.waves.volume = 0.25; // slightly louder than explore to be audible
 audio.waves.preload = "auto";
 
 if (audio.typeSound) {
