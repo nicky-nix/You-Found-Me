@@ -5,6 +5,7 @@ const audio = {
 	sealCrack: new Audio("assets/audio/sealopen.mp3"),
 	memoryFound: new Audio("assets/audio/memory.mp3"),
 	typeSound: new Audio("assets/audio/typing.mp3"),
+	waves: new Audio("assets/audio/waves1.mp3"), // ← new
 
 	// PERF: Reuse a single AudioContext and OscillatorNode chain instead of
 	// creating a new AudioContext on every click. Android WebView has a hard
@@ -73,6 +74,9 @@ audio.reveal.volume = 0.5;
 audio.sealCrack.volume = 1;
 audio.typeSound.volume = 0.7;
 audio.memoryFound.volume = 0.5;
+audio.waves.loop = true;
+audio.waves.volume = 0.55; // slightly louder than explore to be audible
+audio.waves.preload = "auto";
 
 if (audio.typeSound) {
 	audio.typeSound.loop = true;
@@ -87,6 +91,7 @@ if (audio.typeSound) {
 	audio.sealCrack,
 	audio.memoryFound,
 	audio.typeSound,
+	audio.waves,
 ].forEach((a) => {
 	a.preload = "auto";
 	// Load a silent portion to prime the decoder
@@ -98,9 +103,10 @@ let musicStarted = false;
 function startMusic() {
 	if (musicStarted) return;
 	musicStarted = true;
-	audio.explore
+	audio.waves.play().catch((err) => console.log("Waves blocked:", err));
+	/*audio.explore
 		.play()
-		.catch((err) => console.log("Audio playback blocked:", err));
+		.catch((err) => console.log("Audio playback blocked:", err));*/
 }
 
 window.addEventListener("pointerdown", startMusic, { once: true });

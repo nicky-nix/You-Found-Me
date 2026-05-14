@@ -741,10 +741,40 @@ function updateTitle() {
 		updateCamera();
 		showNotification("🦶 Tap any tile – I'll walk there!");
 		movementHintShown = true;
-		audio.explore
+		/*audio.explore
 			.play()
-			.catch((err) => console.log("Explore music failed:", err));
+			.catch((err) => console.log("Explore music failed:", err));*/
+		crossfadeWavesToExplore();
 	}
+}
+
+function crossfadeWavesToExplore() {
+	const fadeDuration = 2000; // 2 seconds of overlap
+	const fadeInterval = 50;
+	const steps = fadeDuration / fadeInterval;
+	const volumeStep = 1 / steps;
+
+	audio.explore.volume = 0;
+	audio.explore
+		.play()
+		.catch((err) => console.log("Explore music blocked:", err));
+
+	let step = 0;
+	const crossfade = setInterval(() => {
+		step++;
+		// Fade out waves
+		audio.waves.volume = Math.max(0, audio.waves.volume - volumeStep);
+		// Fade in explore
+		audio.explore.volume = Math.min(0.4, audio.explore.volume + volumeStep);
+
+		if (step >= steps) {
+			clearInterval(crossfade);
+			audio.waves.pause();
+			audio.waves.currentTime = 0;
+			audio.waves.volume = 0.55; // reset for potential later use
+			audio.explore.volume = 0.4;
+		}
+	}, fadeInterval);
 }
 
 function drawTitleCard() {
