@@ -16,6 +16,7 @@ let targetX = null,
 let pathQueue = []; // tiles to walk through (x, y)
 let isMovingToTarget = false;
 let movementHintShown = false;
+let clickedTile = null; // stores { col, row } of tapped destination
 
 canvas.width = GAME_W;
 canvas.height = GAME_H;
@@ -175,6 +176,20 @@ function draw() {
 		drawPlayer();
 		drawParticles();
 		drawMemoryMarkers();
+		if (clickedTile) {
+			const tx = clickedTile.col * TILE_SIZE;
+			const ty = clickedTile.row * TILE_SIZE;
+			const pulse = 0.35 + Math.abs(Math.sin(Date.now() / 250)) * 0.4;
+			ctx.save();
+			ctx.globalAlpha = pulse;
+			ctx.fillStyle = "#ffd700";
+			ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+			ctx.globalAlpha = 1;
+			ctx.strokeStyle = "#ffffff";
+			ctx.lineWidth = 2;
+			ctx.strokeRect(tx + 1, ty + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+			ctx.restore();
+		}
 		ctx.restore();
 		drawFog();
 		drawMemoryPopup();
@@ -333,6 +348,7 @@ function updatePlayer() {
 		isMovingToTarget = false;
 		pathQueue = [];
 		targetX = targetY = null;
+		clickedTile = null;
 	}
 
 	// Auto-move toward next target in queue
@@ -347,7 +363,10 @@ function updatePlayer() {
 			player.x = target.x;
 			player.y = target.y;
 			pathQueue.shift();
-			if (pathQueue.length === 0) isMovingToTarget = false;
+			if (pathQueue.length === 0) {
+				isMovingToTarget = false;
+				clickedTile = null;
+			}
 		} else {
 			// Move toward waypoint — skip the collision system so BFS-verified
 			// waypoints are always reachable (collision already baked into BFS)
@@ -557,6 +576,10 @@ function updateTitle() {
 		gameState = "exploring";
 		titleTimer = 0;
 		updateCamera();
+
+		// Show movement hint automatically as soon as the player can move
+		showNotification("🦶 Tap any tile – I'll walk there!");
+		movementHintShown = true;
 
 		// Double check: Ensure exploration music starts right here!
 		audio.explore
@@ -1203,6 +1226,7 @@ function handleCanvasTap(e) {
 			x: step.col * TILE_SIZE + (TILE_SIZE - player.width) / 2,
 			y: step.row * TILE_SIZE + (TILE_SIZE - player.height) / 2,
 		}));
+		clickedTile = { col: tileCol, row: tileRow };
 		isMovingToTarget = true;
 		if (!movementHintShown) {
 			showNotification("🦶 Tap any tile – I'll walk there!");
@@ -1210,6 +1234,7 @@ function handleCanvasTap(e) {
 		}
 	} else {
 		showNotification("🚫 No path found");
+		clickedTile = null;
 	}
 }
 
