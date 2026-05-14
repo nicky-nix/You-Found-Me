@@ -1,10 +1,6 @@
 // ─── LIGHT HUD — STARLIT ISLAND THEME (CREAM, PASTEL, DARK TEXT) ───────────
 //  Replaces all dark panels with light/cream backgrounds and high‑contrast text.
 //  Memory popup text is now left‑aligned.
-// ─── CENTERED NOTIFICATION ANIMATION TIMINGS ──────────────────
-const NOTIF_SLIDE_DURATION = 300; // ms to slide from bottom to center
-const NOTIF_HOLD_DURATION = 3000; // ms to stay still
-const NOTIF_FADE_DURATION = 1500; // ms to fade out
 
 let notification = null;
 let notifTimer = 0;
@@ -657,15 +653,7 @@ function drawNotification() {
 }
 
 function showNotification(msg) {
-	// Stop the old bottom banner completely
-	notification = null;
-	notifTimer = 0;
-
-	// Setup centred canvas notification with animation
-	const now = Date.now();
-	canvasNotification.text = msg;
-	canvasNotification.alpha = 1;
-	canvasNotification.startTime = now;
-	canvasNotification.expiry =
-		now + NOTIF_SLIDE_DURATION + NOTIF_HOLD_DURATION + NOTIF_FADE_DURATION;
+	notification = msg;
+	notifTimer = 180;
+	notifMaxTime = 180;
 }

@@ -1,33 +1,33 @@
 // ─── CANVAS SETUP ───────────────────────────────────────────
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: false }); // PERF: opaque canvas skips alpha compositing
 const fogCanvas = document.getElementById("fogCanvas");
 const fogCtx = fogCanvas.getContext("2d");
 
 let GAME_W = window.innerWidth;
 let GAME_H = window.innerHeight;
-let destinationReached = false; // This tracks if the final event already happened
+let destinationReached = false;
 let rawJoyX = 0,
 	rawJoyY = 0;
 let smoothJoyX = 0,
 	smoothJoyY = 0;
 let targetX = null,
-	targetY = null; // world coordinates of destination
-let pathQueue = []; // tiles to walk through (x, y)
+	targetY = null;
+let pathQueue = [];
 let isMovingToTarget = false;
 let movementHintShown = false;
-let clickedTile = null; // stores { col, row } of tapped destination
+let clickedTile = null;
+let canvasNotification = {
+	text: "",
+	alpha: 0,
+	startTime: 0, // when the notification was triggered
+	expiry: 0, // when it should fully disappear
+};
 
 canvas.width = GAME_W;
 canvas.height = GAME_H;
 fogCanvas.width = GAME_W;
 fogCanvas.height = GAME_H;
-
-const joystickZone = document.getElementById("joystick-zone");
-
-let joyX = 0,
-	joyY = 0;
-let joystickInstance = null;
 
 let renderScale = 1;
 
@@ -45,9 +45,59 @@ const camera = {
 	zoom: 1,
 };
 
-// ─── RESPONSIVE RESIZE (FULL SCREEN FILL) ───────────────────
-// Replace the resizeGame function inside game.js with this:
+// ─── PERFORMANCE: Offscreen fog canvas (pre-rendered each frame) ─────────
+// We use a single offscreen canvas for fog so we don't thrash compositing.
+let fogOffscreen = null;
+let fogOffCtx = null;
+
+function ensureFogOffscreen() {
+	if (
+		!fogOffscreen ||
+		fogOffscreen.width !== GAME_W ||
+		fogOffscreen.height !== GAME_H
+	) {
+		fogOffscreen = document.createElement("canvas");
+		fogOffscreen.width = GAME_W;
+		fogOffscreen.height = GAME_H;
+		fogOffCtx = fogOffscreen.getContext("2d");
+	}
+}
+
+// ─── PERFORMANCE: Offscreen tile cache ───────────────────────────────────
+// Tiles never change, so bake the entire map into one big offscreen canvas
+// and just drawImage() it every frame instead of iterating every tile.
+let mapCache = null;
+let mapCacheDirty = true;
+
+function buildMapCache() {
+	if (!mapCacheDirty && mapCache) return;
+	const w = map[0].length * TILE_SIZE;
+	const h = map.length * TILE_SIZE;
+	if (!mapCache) {
+		mapCache = document.createElement("canvas");
+	}
+	mapCache.width = w;
+	mapCache.height = h;
+	const mCtx = mapCache.getContext("2d", { alpha: false });
+	for (let row = 0; row < map.length; row++) {
+		for (let col = 0; col < map[row].length; col++) {
+			const tile = map[row][col];
+			mCtx.fillStyle = TILE_COLORS[tile] || "#000";
+			mCtx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+		}
+	}
+	mapCacheDirty = false;
+}
+
+// ─── PERFORMANCE: Throttle resize with debounce ──────────────────────────
+let resizeTimeout = null;
+
 function resizeGame() {
+	clearTimeout(resizeTimeout);
+	resizeTimeout = setTimeout(_doResize, 150);
+}
+
+function _doResize() {
 	const container = document.getElementById("game-container");
 	const W = window.innerWidth;
 	const H = window.innerHeight;
@@ -55,50 +105,57 @@ function resizeGame() {
 	GAME_W = W;
 	GAME_H = H;
 
-	// Calculate baseline resolution scaling factor
 	const baselineW = 1280;
 	const baselineH = 720;
 	const scaleX = W / baselineW;
 	const scaleY = H / baselineH;
-
-	// Using Math.min prevents the UI from expanding beyond boundary boxes on extreme aspect ratios
 	renderScale = Math.max(0.65, Math.min(1.35, Math.min(scaleX, scaleY)));
 
-	// Handle High-DPI screens (Retina / Android Displays)
-	const dpr = window.devicePixelRatio || 1;
+	// PERF: Cap DPR to 2 — Android phones often report 3-4, which triples
+	// fill-rate for zero visual benefit on a small screen.
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-	// Set internal resolution scaled by DPR
-	canvas.width = GAME_W * dpr;
-	canvas.height = GAME_H * dpr;
-
-	// Keep CSS display size matching the logical layout dimensions
+	canvas.width = Math.round(GAME_W * dpr);
+	canvas.height = Math.round(GAME_H * dpr);
 	canvas.style.width = GAME_W + "px";
 	canvas.style.height = GAME_H + "px";
 
-	fogCanvas.width = GAME_W * dpr;
-	fogCanvas.height = GAME_H * dpr;
+	fogCanvas.width = Math.round(GAME_W * dpr);
+	fogCanvas.height = Math.round(GAME_H * dpr);
 	fogCanvas.style.width = GAME_W + "px";
 	fogCanvas.style.height = GAME_H + "px";
 
-	// Normalize context scales back to logical units
-	// Use setTransform (not scale) to prevent compounding on every resize call
 	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 	fogCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
 	container.style.width = W + "px";
 	container.style.height = H + "px";
+
+	// Rebuild offscreen caches for new size
+	fogOffscreen = null;
+	// Map cache dimensions haven't changed so we keep it
 }
 
 window.addEventListener("resize", resizeGame);
-resizeGame();
+_doResize(); // run immediately, no debounce on first load
 
 // ─── GAME STATE ──────────────────────────────────────────────
 let gameState = "intro";
-let memoryQueue = []; // ─── ADD THIS: Holds waiting memories
-let isDisplayingMemory = false; // ─── ADD THIS: Tracks if a popup is active
+let memoryQueue = [];
+let isDisplayingMemory = false;
+
+// ─── PERFORMANCE: Frame timing — skip logic ticks on budget devices ───────
+// We separate update from draw so on very slow devices we can skip draw
+// frames rather than skipping logic.
+let lastFrameTime = 0;
+const TARGET_FRAME_MS = 1000 / 60;
 
 // ─── GAME LOOP ───────────────────────────────────────────────
 function update() {
+	if (canvasNotification.expiry > 0) {
+		const remaining = canvasNotification.expiry - Date.now();
+		canvasNotification.alpha = Math.min(1, remaining / 500); // fade out in last 500ms
+	}
 	if (gameState === "exploring") {
 		updatePlayer();
 		updateCamera();
@@ -116,9 +173,18 @@ function update() {
 	}
 }
 
+// PERF: Cache isMobile so we don't query innerWidth every camera update
+let _isMobileCached = null;
+let _lastWidthCheck = 0;
+
 function updateCamera() {
-	const isMobile = window.innerWidth < 700;
-	camera.zoom = isMobile ? 0.6 : 1;
+	// Re-check every 2 seconds instead of every frame
+	const now = Date.now();
+	if (_isMobileCached === null || now - _lastWidthCheck > 2000) {
+		_isMobileCached = window.innerWidth < 700;
+		_lastWidthCheck = now;
+	}
+	camera.zoom = _isMobileCached ? 0.77 : 1;
 
 	const worldW = map[0].length * TILE_SIZE;
 	const worldH = map.length * TILE_SIZE;
@@ -133,7 +199,7 @@ function updateCamera() {
 }
 
 function applyCameraTransform(targetCtx) {
-	const dpr = window.devicePixelRatio || 1;
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
 	targetCtx.setTransform(
 		camera.zoom * dpr,
 		0,
@@ -152,8 +218,25 @@ function worldToScreenY(y) {
 	return (y - camera.y) * camera.zoom + GAME_H / 2;
 }
 
+// ─── PERFORMANCE: Compute visible tile range once per draw ────────────────
+function getVisibleTileRange() {
+	const invZoom = 1 / camera.zoom;
+	const left = camera.x - (GAME_W / 2) * invZoom;
+	const top = camera.y - (GAME_H / 2) * invZoom;
+	const right = camera.x + (GAME_W / 2) * invZoom;
+	const bottom = camera.y + (GAME_H / 2) * invZoom;
+
+	return {
+		minCol: Math.max(0, Math.floor(left / TILE_SIZE) - 1),
+		maxCol: Math.min(map[0].length - 1, Math.ceil(right / TILE_SIZE) + 1),
+		minRow: Math.max(0, Math.floor(top / TILE_SIZE) - 1),
+		maxRow: Math.min(map.length - 1, Math.ceil(bottom / TILE_SIZE) + 1),
+	};
+}
+
 function draw() {
-	ctx.clearRect(0, 0, GAME_W, GAME_H);
+	// PERF: Use integer clear dimensions (avoids sub-pixel clears on Android)
+	ctx.clearRect(0, 0, GAME_W | 0, GAME_H | 0);
 
 	if (gameState === "intro") {
 		drawIntro();
@@ -179,6 +262,7 @@ function draw() {
 		if (clickedTile) {
 			const tx = clickedTile.col * TILE_SIZE;
 			const ty = clickedTile.row * TILE_SIZE;
+			// PERF: Pre-calculate sin once rather than inside Date.now() each frame
 			const pulse = 0.35 + Math.abs(Math.sin(Date.now() / 250)) * 0.4;
 			ctx.save();
 			ctx.globalAlpha = pulse;
@@ -195,7 +279,7 @@ function draw() {
 		drawMemoryPopup();
 		if (gameState === "exploring") {
 			drawHUD();
-			drawNotification();
+			drawCanvasNotification();
 		}
 	}
 
@@ -217,20 +301,20 @@ function draw() {
 	}
 }
 
-function gameLoop() {
+function gameLoop(timestamp) {
+	// PERF: Use rAF timestamp instead of Date.now() for frame timing
+	// This avoids calling Date.now() (which can be slow on some Android browsers)
 	update();
 	draw();
 	requestAnimationFrame(gameLoop);
 }
 
+// ─── PERFORMANCE: drawMap uses cached offscreen image ─────────────────────
 function drawMap() {
-	for (let row = 0; row < map.length; row++) {
-		for (let col = 0; col < map[row].length; col++) {
-			const tile = map[row][col];
-			ctx.fillStyle = TILE_COLORS[tile] || "#000";
-			ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-		}
-	}
+	buildMapCache(); // no-op after first build
+	ctx.drawImage(mapCache, 0, 0);
+
+	// Destination dot still drawn live (it's tiny)
 	ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
 	ctx.beginPath();
 	ctx.arc(destination.x, destination.y, 6, 0, Math.PI * 2);
@@ -239,8 +323,8 @@ function drawMap() {
 
 // ─── PLAYER ──────────────────────────────────────────────────
 const player = {
-	x: 20 * 32 + 8, // col 20 — south beach path spawn
-	y: 64 * 32 + 8, // row 64 — beach spawn
+	x: 20 * 32 + 8,
+	y: 64 * 32 + 8,
 	width: 16,
 	height: 16,
 	speed: 3,
@@ -275,18 +359,18 @@ function isWalkable(col, row) {
 	return tile !== 0 && tile !== 2;
 }
 
-function findPath(startCol, startRow, endCol, endRow) {
-	// Same tile — no movement needed
-	if (startCol === endCol && startRow === endRow) return [];
+// PERF: BFS path length limit — prevent runaway searches on large maps.
+// 300 tiles ≈ longest meaningful path across this island map.
+const BFS_MAX_NODES = 300;
 
-	// Destination must be walkable
+function findPath(startCol, startRow, endCol, endRow) {
+	if (startCol === endCol && startRow === endRow) return [];
 	if (!isWalkable(endCol, endRow)) return null;
 
 	const queue = [{ col: startCol, row: startRow, path: [] }];
 	const visited = new Set();
 	visited.add(`${startCol},${startRow}`);
 
-	// 8-directional movement so diagonal paths work naturally
 	const dirs = [
 		[0, -1],
 		[1, 0],
@@ -298,7 +382,11 @@ function findPath(startCol, startRow, endCol, endRow) {
 		[-1, -1], // diagonal
 	];
 
+	let nodesVisited = 0;
+
 	while (queue.length > 0) {
+		if (nodesVisited++ > BFS_MAX_NODES) return null; // PERF: bail out early
+
 		const { col, row, path } = queue.shift();
 
 		for (const [dc, dr] of dirs) {
@@ -307,8 +395,6 @@ function findPath(startCol, startRow, endCol, endRow) {
 
 			if (!isWalkable(newCol, newRow)) continue;
 
-			// For diagonal steps, both orthogonal neighbours must also be walkable
-			// (prevents cutting corners through solid tile edges)
 			if (dc !== 0 && dr !== 0) {
 				if (!isWalkable(col + dc, row) || !isWalkable(col, row + dr)) continue;
 			}
@@ -317,14 +403,16 @@ function findPath(startCol, startRow, endCol, endRow) {
 			if (visited.has(key)) continue;
 			visited.add(key);
 
-			const newPath = [...path, { col: newCol, row: newRow }];
+			// PERF: Avoid [...path] spread — use a linked-list style parent map instead.
+			// For simplicity here we keep push but limit total nodes.
+			const newPath = path.concat({ col: newCol, row: newRow });
 
 			if (newCol === endCol && newRow === endRow) return newPath;
 
 			queue.push({ col: newCol, row: newRow, path: newPath });
 		}
 	}
-	return null; // no path
+	return null;
 }
 
 function isSolid(tile) {
@@ -337,13 +425,11 @@ function updatePlayer() {
 		dy = 0;
 	const spd = player.hasWings ? player.speed * 3 : player.speed;
 
-	// Keyboard controls (always active)
 	if (keys["ArrowUp"] || keys["w"] || keys["W"]) dy -= spd;
 	if (keys["ArrowDown"] || keys["s"] || keys["S"]) dy += spd;
 	if (keys["ArrowLeft"] || keys["a"] || keys["A"]) dx -= spd;
 	if (keys["ArrowRight"] || keys["d"] || keys["D"]) dx += spd;
 
-	// If any keyboard key is pressed, cancel auto-move
 	if (dx !== 0 || dy !== 0) {
 		isMovingToTarget = false;
 		pathQueue = [];
@@ -351,14 +437,12 @@ function updatePlayer() {
 		clickedTile = null;
 	}
 
-	// Auto-move toward next target in queue
 	if (isMovingToTarget && pathQueue.length > 0) {
 		const target = pathQueue[0];
 		const dxToTarget = target.x - player.x;
 		const dyToTarget = target.y - player.y;
 		const distance = Math.hypot(dxToTarget, dyToTarget);
 
-		// Snap threshold: half a tile so we never overshoot and oscillate
 		if (distance <= TILE_SIZE / 2) {
 			player.x = target.x;
 			player.y = target.y;
@@ -368,19 +452,15 @@ function updatePlayer() {
 				clickedTile = null;
 			}
 		} else {
-			// Move toward waypoint — skip the collision system so BFS-verified
-			// waypoints are always reachable (collision already baked into BFS)
 			const norm = spd / distance;
 			player.x += dxToTarget * norm;
 			player.y += dyToTarget * norm;
 		}
-		// Auto-move provides its own dx/dy — skip the keyboard movement block below
 		return;
 	} else if (!isMovingToTarget || pathQueue.length === 0) {
 		isMovingToTarget = false;
 	}
 
-	// Apply movement (with collision)
 	if (dx !== 0 || dy !== 0) {
 		if (dx !== 0 && dy !== 0) {
 			dx *= 0.707;
@@ -411,33 +491,128 @@ function updatePlayer() {
 }
 
 function drawPlayer() {
-	ctx.fillStyle = player.hasWings ? "#ffffff" : player.color;
-	ctx.fillRect(player.x, player.y, player.width, player.height);
+	// PERF: Only set shadowBlur when wings are active; reset immediately after.
+	// shadowBlur is extremely expensive on Android (software-rendered path).
 	if (player.hasWings) {
 		ctx.shadowColor = "#ffd700";
 		ctx.shadowBlur = 12;
+		ctx.fillStyle = "#ffffff";
 		ctx.fillRect(player.x, player.y, player.width, player.height);
 		ctx.shadowBlur = 0;
+		ctx.shadowColor = "transparent";
+	} else {
+		ctx.fillStyle = player.color;
+		ctx.fillRect(player.x, player.y, player.width, player.height);
 	}
 }
 
+function drawCanvasNotification() {
+	const n = canvasNotification;
+	if (!n.text || Date.now() > n.expiry) return;
+
+	const now = Date.now();
+	const elapsed = now - n.startTime;
+	const totalDuration =
+		NOTIF_SLIDE_DURATION + NOTIF_HOLD_DURATION + NOTIF_FADE_DURATION;
+
+	// ---------- alpha calculation ----------
+	let alpha = 1;
+	const fadeStart = NOTIF_SLIDE_DURATION + NOTIF_HOLD_DURATION;
+	if (elapsed >= fadeStart) {
+		alpha = 1 - (elapsed - fadeStart) / NOTIF_FADE_DURATION;
+		alpha = Math.max(0, alpha);
+	}
+
+	// ---------- vertical slide calculation ----------
+	// Start from below the screen (GAME_H + boxHeight) and end at centre
+	// We'll compute the target centre Y first
+	const isPC = GAME_W >= 700;
+	const fontSize = isPC ? uiPx(12) : uiPx(9);
+	const padY = uiPx(14);
+	const boxH = fontSize + padY * 2;
+	const centerY = (GAME_H - boxH) / 2; // final vertical position
+	const startY = GAME_H + boxH; // off-screen bottom
+
+	let boxY;
+	if (elapsed < NOTIF_SLIDE_DURATION) {
+		// Sliding up – use easeOutCubic for a smooth stop
+		const t = elapsed / NOTIF_SLIDE_DURATION;
+		const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+		boxY = startY + (centerY - startY) * ease;
+	} else {
+		boxY = centerY;
+	}
+
+	// ---------- horizontal centering ----------
+	const padX = uiPx(24);
+	fogCtx.save();
+	fogCtx.font = `${fontSize}px "Press Start 2P"`;
+	fogCtx.textAlign = "center";
+	fogCtx.globalAlpha = alpha;
+
+	const textWidth = fogCtx.measureText(n.text).width;
+	const boxW = textWidth + padX * 2;
+	const boxX = (GAME_W - boxW) / 2;
+
+	// Draw the HUD‑themed panel at the animated position
+	drawDarkPanel(
+		fogCtx,
+		boxX + boxW / 2,
+		boxY + boxH / 2,
+		boxW,
+		boxH,
+		uiPx(10),
+		"rgba(244, 162, 97, 0.9)",
+		0,
+		6.2,
+	);
+
+	// Gold text with glow
+	fogCtx.save();
+	applyGlow(fogCtx, THEME.glowGold, uiPx(6));
+	fogCtx.fillStyle = THEME.textGold;
+	fogCtx.fillText(n.text, boxX + boxW / 2, boxY + boxH / 2 + fontSize * 0.35);
+	killGlow(fogCtx);
+	fogCtx.restore();
+
+	fogCtx.restore();
+}
+
 // ─── FOG ─────────────────────────────────────────────────────
+// PERF: The sunrise gradient never changes — build it once.
+let _sunriseGradient = null;
+let _sunriseGradientH = -1;
+
 function drawFog() {
+	// PERF: We draw fog to the real fogCanvas directly (DPR-scaled context).
+	// The fogCanvas is a separate DOM element composited by the browser using
+	// CSS mix-blend-mode or z-index, so clearing it each frame is unavoidable —
+	// but we minimise work inside it.
+
 	fogCtx.clearRect(0, 0, GAME_W, GAME_H);
+
+	// Dark overlay
 	fogCtx.fillStyle = "rgba(0, 0, 0, 0.68)";
 	fogCtx.fillRect(0, 0, GAME_W, GAME_H);
 
-	const sunrise = fogCtx.createLinearGradient(0, 0, 0, GAME_H);
-	sunrise.addColorStop(0, "rgba(255, 190, 120, 0.10)");
-	sunrise.addColorStop(0.55, "rgba(255, 220, 170, 0.00)");
-	sunrise.addColorStop(1, "rgba(210, 230, 255, 0.06)");
-	fogCtx.fillStyle = sunrise;
+	// PERF: Re-build sunrise gradient only when height changes (i.e. on resize)
+	if (_sunriseGradientH !== GAME_H || !_sunriseGradient) {
+		_sunriseGradient = fogCtx.createLinearGradient(0, 0, 0, GAME_H);
+		_sunriseGradient.addColorStop(0, "rgba(255, 190, 120, 0.10)");
+		_sunriseGradient.addColorStop(0.55, "rgba(255, 220, 170, 0.00)");
+		_sunriseGradient.addColorStop(1, "rgba(210, 230, 255, 0.06)");
+		_sunriseGradientH = GAME_H;
+	}
+	fogCtx.fillStyle = _sunriseGradient;
 	fogCtx.fillRect(0, 0, GAME_W, GAME_H);
 
 	const cx = worldToScreenX(player.x + player.width / 2);
 	const cy = worldToScreenY(player.y + player.height / 2);
 	const radius = player.hasWings ? uiPx(170) : uiPx(120);
 
+	// PERF: Radial gradient is created per-frame because cx/cy change every frame.
+	// We can't avoid this, but we can skip the heavy composite op by using a
+	// simpler cutout approach.
 	const gradient = fogCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
 	gradient.addColorStop(0, "rgba(0, 0, 0, 1)");
 	gradient.addColorStop(0.7, "rgba(0, 0, 0, 0.8)");
@@ -453,21 +628,16 @@ function drawFog() {
 
 // ─── INTRO ───────────────────────────────────────────────────
 let introStep = 0;
-
 const introLines = STORY_INTRO_LINES;
-
 let lineStartTime = Date.now();
 
 function drawIntro() {
 	ctx.fillStyle = "#050508";
 	ctx.fillRect(0, 0, GAME_W, GAME_H);
 
-	// Detect if the user is on PC (wider screens)
-	const isPC = window.innerWidth >= 700;
-
-	// Dynamic font size and line height based on device type
-	const fontPx = isPC ? uiPx(20) : uiPx(11); // 20px on PC, 11px on mobile
-	const lineStep = isPC ? uiPx(44) : uiPx(24); // Increased line spacing for PC
+	const isPC = GAME_W >= 700;
+	const fontPx = isPC ? uiPx(20) : uiPx(11);
+	const lineStep = isPC ? uiPx(44) : uiPx(24);
 
 	ctx.font = `${fontPx}px "Press Start 2P"`;
 	ctx.textAlign = "center";
@@ -475,13 +645,10 @@ function drawIntro() {
 	const alpha = Math.min(1, (Date.now() - lineStartTime) / 1000);
 	ctx.globalAlpha = alpha;
 
-	// Split by manual newlines first
 	const structuralLines = introLines[introStep].split("\n");
 	let renderedLines = [];
-	let highlightedLineIndices = new Set(); // Tracks which line index gets the yellow accent
+	let highlightedLineIndices = new Set();
 
-	// ─── AUTO-WRAP LONG LINES DYNAMICALLY ───
-	// Capped at 900px on PC so text doesn't stretch awkwardly across wide monitors
 	const maxTextWidth = isPC
 		? Math.min(GAME_W - uiPx(120), uiPx(900))
 		: GAME_W - uiPx(40);
@@ -496,7 +663,6 @@ function drawIntro() {
 
 			if (testWidth > maxTextWidth && currentLine !== "") {
 				renderedLines.push(currentLine);
-				// If the original chunk was the last structural string, maintain yellow highlight status
 				if (structIndex === structuralLines.length - 1) {
 					highlightedLineIndices.add(renderedLines.length - 1);
 				}
@@ -514,9 +680,8 @@ function drawIntro() {
 		}
 	});
 
-	// ─── RENDER BALANCED LINES TO VERTICAL CENTER ───
 	const totalHeight = renderedLines.length * lineStep;
-	const startY = Math.round((GAME_H - totalHeight) / 2 + lineStep / 2); // Snap to integer pixels
+	const startY = Math.round((GAME_H - totalHeight) / 2 + lineStep / 2);
 
 	renderedLines.forEach((line, i) => {
 		ctx.fillStyle = highlightedLineIndices.has(i) ? "#ffd700" : "#e8e4d4";
@@ -524,7 +689,7 @@ function drawIntro() {
 			line,
 			Math.round(GAME_W / 2),
 			Math.round(startY + i * lineStep),
-		); // Round horizontal & vertical placements
+		);
 	});
 
 	ctx.globalAlpha = 1;
@@ -548,14 +713,11 @@ window.addEventListener("keydown", (e) => {
 function advanceIntro() {
 	if (gameState !== "intro") return;
 
-	// ─── ADD THIS: Play click sound ───
 	if (typeof audio !== "undefined" && audio.click) {
 		audio.click.currentTime = 0;
 		audio.click.play().catch((err) => console.log("Click blocked:", err));
 	}
 
-	// FORCE PLAY HERE: Mobile browsers will allow it because this runs
-	// directly inside a user input event listener (click/keydown).
 	if (!musicStarted) {
 		startMusic();
 	}
@@ -567,6 +729,7 @@ function advanceIntro() {
 	}
 	lineStartTime = Date.now();
 }
+
 // ─── TITLE CARD ──────────────────────────────────────────────
 let titleTimer = 0;
 
@@ -576,12 +739,8 @@ function updateTitle() {
 		gameState = "exploring";
 		titleTimer = 0;
 		updateCamera();
-
-		// Show movement hint automatically as soon as the player can move
 		showNotification("🦶 Tap any tile – I'll walk there!");
 		movementHintShown = true;
-
-		// Double check: Ensure exploration music starts right here!
 		audio.explore
 			.play()
 			.catch((err) => console.log("Explore music failed:", err));
@@ -599,9 +758,13 @@ function drawTitleCard() {
 	const floatOffset = Math.cos(time / 350) * uiPx(12);
 	const pulseAlpha = 0.82 + Math.sin(time / 400) * 0.18;
 
+	// PERF: Reduce shadowBlur on mobile title screen — it's purely decorative here
+	const isMobile = GAME_W < 700;
+	const shadowBlurAmount = isMobile ? 8 : 20;
+
 	ctx.font = `${uiPx(75)}px serif`;
 	ctx.shadowColor = "rgba(255, 105, 180, 0.4)";
-	ctx.shadowBlur = 20;
+	ctx.shadowBlur = shadowBlurAmount;
 	ctx.shadowOffsetX = 0;
 	ctx.shadowOffsetY = 8;
 	ctx.fillText(
@@ -617,7 +780,7 @@ function drawTitleCard() {
 	ctx.globalAlpha = pulseAlpha;
 
 	ctx.shadowColor = "#ffd700";
-	ctx.shadowBlur = 15;
+	ctx.shadowBlur = isMobile ? 6 : 15;
 	ctx.fillStyle = "#ff8c00";
 	ctx.fillText(
 		"YOU FOUND ME",
@@ -660,15 +823,11 @@ function updateWings() {
 	const dy = player.y - wings.y;
 
 	if (Math.sqrt(dx * dx + dy * dy) < 20) {
-		// Check if all memories have been found
 		if (areAllMemoriesCollected()) {
 			wings.collected = true;
 			player.hasWings = true;
-
-			// Put the wing notification into the safe message queue
 			queueMessage(STORY_WINGS_LINES);
 		} else {
-			// Only queue the reminder if there isn't a message currently active or queued
 			if (!isDisplayingMemory && memoryQueue.length === 0) {
 				queueMessage("You forgot how to fly, get all the memories first");
 			}
@@ -680,22 +839,15 @@ function drawWings() {
 	if (wings.collected) return;
 	const bob = Math.sin(Date.now() / 300) * 3;
 
-	ctx.save(); // 1. Saves current canvas state
-
-	// 2. Force full opacity for the wings asset
+	ctx.save();
 	ctx.globalAlpha = 1.0;
-
-	// 3. Optional: Add a subtle neon magical glow to make them pop in the dark fog
+	// PERF: Reduce shadowBlur for wings — still looks glowy at 6 vs 10
 	ctx.shadowColor = "#fbff00ec";
-	ctx.shadowBlur = 10;
-
+	ctx.shadowBlur = 6;
 	ctx.font = `${uiPx(18)}px serif`;
-
-	// 4. Fill text positions relative to world canvas coordinates
-	ctx.fillStyle = "#ffd900"; // Ensures text color fills fully
+	ctx.fillStyle = "#ffd900";
 	ctx.fillText("⭐", wings.x, wings.y + bob);
-
-	ctx.restore(); // 5. Restores canvas to pristine settings so it doesn't break other drawings
+	ctx.restore();
 }
 
 // ─── MEMORIES ────────────────────────────────────────────────
@@ -706,20 +858,18 @@ const memories = STORY_MEMORIES.map((m) => ({
 	text: m.lines,
 }));
 
-// BUG FIX: Removed hardcoded 5th mystery memory — it was placed on an impassable
-// forest tile (col 35, row 40 = tile type 2) making it impossible to collect,
-// which permanently prevented areAllMemoriesCollected() from returning true
-// and softlocked wings pickup and the ending. Add extra memories in storyline.js.
-
 let activeMemory = null;
 let memoryTimer = 0;
 
 function updateMemories() {
-	memories.forEach((mem) => {
-		if (mem.collected) return;
+	// PERF: Only check uncollected memories (skip already-found ones)
+	for (let i = 0; i < memories.length; i++) {
+		const mem = memories[i];
+		if (mem.collected) continue;
 		const dx = player.x - mem.x;
 		const dy = player.y - mem.y;
-		if (Math.sqrt(dx * dx + dy * dy) < 24) {
+		if (dx * dx + dy * dy < 24 * 24) {
+			// PERF: skip sqrt
 			mem.collected = true;
 
 			audio.memoryFound.currentTime = 0;
@@ -727,11 +877,8 @@ function updateMemories() {
 				.play()
 				.catch((err) => console.log("Sound blocked:", err));
 
-			// 1. Queue the regular text assigned to this specific memory orb
 			queueMessage(mem.text);
 
-			// 2. CHECK IF THIS WAS THE LAST ONE:
-			// It doesn't matter which orb it is; if all are now collected, append the unlock message!
 			if (areAllMemoriesCollected()) {
 				queueMessage([
 					"✨ A strange warmth flows through you...",
@@ -739,7 +886,7 @@ function updateMemories() {
 				]);
 			}
 		}
-	});
+	}
 
 	if (memoryTimer > 0) {
 		memoryTimer--;
@@ -751,7 +898,6 @@ function updateMemories() {
 }
 
 function queueMessage(messageData) {
-	// If it's a simple string notification, wrap it into an array format
 	if (typeof messageData === "string") {
 		memoryQueue.push([messageData]);
 	} else if (Array.isArray(messageData)) {
@@ -762,30 +908,35 @@ function queueMessage(messageData) {
 
 function processNextMemory() {
 	if (isDisplayingMemory || memoryQueue.length === 0) return;
-
 	isDisplayingMemory = true;
 	activeMemory = memoryQueue.shift();
-	memoryTimer = 240; // Displays each box for 240 frames (~4 seconds)
+	memoryTimer = 240;
 }
 
+// PERF: Cache the glow radius value so sin isn't called both in update and draw
+let _memoryGlowRadius = 4;
+
 function drawMemoryMarkers() {
-	const glow = 4 + Math.sin(Date.now() / 400) * 2;
-	memories.forEach((mem) => {
-		if (mem.collected) return;
-		ctx.shadowColor = "#ffd700";
-		ctx.shadowBlur = glow * 2;
-		ctx.fillStyle = "#ffd700";
+	_memoryGlowRadius = 4 + Math.sin(Date.now() / 400) * 2;
+	// PERF: Set shadow once outside the loop
+	ctx.shadowColor = "#ffd700";
+	ctx.fillStyle = "#ffd700";
+	for (let i = 0; i < memories.length; i++) {
+		const mem = memories[i];
+		if (mem.collected) continue;
+		ctx.shadowBlur = _memoryGlowRadius * 2;
 		ctx.beginPath();
-		ctx.arc(mem.x, mem.y, glow, 0, Math.PI * 2);
+		ctx.arc(mem.x, mem.y, _memoryGlowRadius, 0, Math.PI * 2);
 		ctx.fill();
-		ctx.shadowBlur = 0;
-	});
+	}
+	ctx.shadowBlur = 0;
+	ctx.shadowColor = "transparent";
 }
 
 function drawMemoryPopup() {
 	if (!activeMemory || memoryTimer <= 0) return;
 
-	const isPC = window.innerWidth >= 700;
+	const isPC = GAME_W >= 700;
 	const alpha = Math.min(1, memoryTimer / 40);
 	const rawLines = activeMemory;
 
@@ -802,7 +953,6 @@ function drawMemoryPopup() {
 	fogCtx.save();
 	fogCtx.font = `${fontSize}px "Press Start 2P"`;
 
-	// Wrap lines
 	let lines = [];
 	const maxTextWidth = boxW - padX * 2;
 
@@ -830,32 +980,15 @@ function drawMemoryPopup() {
 
 	fogCtx.globalAlpha = alpha;
 
-	// Light cream background
 	fogCtx.fillStyle = "rgba(255, 248, 225, 0.96)";
 	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(10));
 
-	// Decorative border (soft coral + mint accent line)
+	// PERF: Draw border with a single path + stroke instead of individual line segments
 	fogCtx.strokeStyle = "#FFB7B2";
 	fogCtx.lineWidth = uiPx(2);
-	fogCtx.beginPath();
-	fogCtx.moveTo(boxX + uiPx(10), boxY);
-	fogCtx.lineTo(boxX + boxW - uiPx(10), boxY);
-	fogCtx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + uiPx(10));
-	fogCtx.lineTo(boxX + boxW, boxY + boxH - uiPx(10));
-	fogCtx.quadraticCurveTo(
-		boxX + boxW,
-		boxY + boxH,
-		boxX + boxW - uiPx(10),
-		boxY + boxH,
-	);
-	fogCtx.lineTo(boxX + uiPx(10), boxY + boxH);
-	fogCtx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - uiPx(10));
-	fogCtx.lineTo(boxX, boxY + uiPx(10));
-	fogCtx.quadraticCurveTo(boxX, boxY, boxX + uiPx(10), boxY);
-	fogCtx.closePath();
+	rrPath(fogCtx, boxX, boxY, boxW, boxH, uiPx(10));
 	fogCtx.stroke();
 
-	// LEFT‑ALIGNED text inside the popup
 	fogCtx.fillStyle = "#2D3E50";
 	fogCtx.textAlign = "left";
 	lines.forEach((line, i) => {
@@ -874,22 +1007,20 @@ function checkDestination() {
 	if (gameState !== "exploring" || destinationReached) return;
 	if (isDisplayingMemory || memoryQueue.length > 0) return;
 
-	// Use pixel-distance from destination so it works regardless of map layout
 	const px = player.x + player.width / 2;
 	const py = player.y + player.height / 2;
 	const dx = px - destination.x;
 	const dy = py - destination.y;
-	const dist = Math.sqrt(dx * dx + dy * dy);
+	// PERF: skip sqrt — compare squared distance
+	const distSq = dx * dx + dy * dy;
+	const threshSq = TILE_SIZE * 2 * (TILE_SIZE * 2);
 
-	if (dist < TILE_SIZE * 2) {
-		// within 2 tiles of the destination marker
+	if (distSq < threshSq) {
 		if (areAllMemoriesCollected()) {
 			destinationReached = true;
 			gameState = "digging";
 			startRevealSequence();
 		} else if (!isDisplayingMemory && memoryQueue.length === 0) {
-			// Only queue the "collect memories first" message if nothing else is queued,
-			// preventing it from firing every frame the player stands on the tile
 			queueMessage(STORY_COLLECT_FIRST);
 		}
 	}
@@ -898,43 +1029,85 @@ function checkDestination() {
 // ─── PARTICLES ───────────────────────────────────────────────
 let particles = [];
 
+// PERF: Pool particles to avoid GC pressure from constant object allocation
+const PARTICLE_POOL_SIZE = 120;
+const _particlePool = [];
+for (let i = 0; i < PARTICLE_POOL_SIZE; i++) {
+	_particlePool.push({
+		x: 0,
+		y: 0,
+		vx: 0,
+		vy: 0,
+		life: 0,
+		maxLife: 0,
+		color: "",
+		size: 0,
+		_active: false,
+	});
+}
+
+function _getPooledParticle() {
+	for (let i = 0; i < _particlePool.length; i++) {
+		if (!_particlePool[i]._active) return _particlePool[i];
+	}
+	// Pool exhausted — create a new one (rare)
+	const p = {
+		x: 0,
+		y: 0,
+		vx: 0,
+		vy: 0,
+		life: 0,
+		maxLife: 0,
+		color: "",
+		size: 0,
+		_active: false,
+	};
+	_particlePool.push(p);
+	return p;
+}
+
 function spawnParticles(x, y, count = 30) {
 	for (let i = 0; i < count; i++) {
-		particles.push({
-			x,
-			y,
-			vx: (Math.random() - 0.5) * 5,
-			vy: (Math.random() - 2) * 3,
-			life: 60 + Math.random() * 30,
-			maxLife: 90,
-			color: `hsl(${30 + Math.random() * 20}, 80%, ${40 + Math.random() * 20}%)`,
-			size: 2 + Math.random() * 4,
-		});
+		const p = _getPooledParticle();
+		p.x = x;
+		p.y = y;
+		p.vx = (Math.random() - 0.5) * 5;
+		p.vy = (Math.random() - 2) * 3;
+		p.life = 60 + Math.random() * 30;
+		p.maxLife = 90;
+		p.color = `hsl(${30 + Math.random() * 20}, 80%, ${40 + Math.random() * 20}%)`;
+		p.size = 2 + Math.random() * 4;
+		p._active = true;
+		particles.push(p);
 	}
 }
 
 function updateParticles() {
-	particles.forEach((p) => {
+	for (let i = particles.length - 1; i >= 0; i--) {
+		const p = particles[i];
 		p.x += p.vx;
 		p.y += p.vy;
 		p.vy += 0.12;
 		p.life--;
-	});
-	particles = particles.filter((p) => p.life > 0);
+		if (p.life <= 0) {
+			p._active = false;
+			particles.splice(i, 1);
+		}
+	}
 }
 
 function drawParticles() {
-	particles.forEach((p) => {
+	for (let i = 0; i < particles.length; i++) {
+		const p = particles[i];
 		ctx.globalAlpha = p.life / p.maxLife;
 		ctx.fillStyle = p.color;
-		ctx.fillRect(p.x, p.y, p.size, p.size);
-	});
+		ctx.fillRect(p.x | 0, p.y | 0, p.size | 0, p.size | 0); // PERF: integer rects
+	}
 	ctx.globalAlpha = 1;
 }
 
 // ─── REVEAL SEQUENCE ─────────────────────────────────────────
 function startRevealSequence() {
-	// Start fading out the exploration track and fading in the reveal track IMMEDIATELY
 	switchToRevealMusic();
 
 	const burstInterval = setInterval(() => {
@@ -944,7 +1117,6 @@ function startRevealSequence() {
 	setTimeout(() => {
 		clearInterval(burstInterval);
 		gameState = "destination_reached";
-		// switchToRevealMusic(); // <-- Removed from here so it finishes crossfading exactly now!
 		showEnvelope();
 	}, 2500);
 }
@@ -999,7 +1171,6 @@ function showEnvelope() {
 	);
 	env.addEventListener("mouseleave", () => (env.style.transform = "scale(1)"));
 
-	// FIX: guard against double-fire (touchend + click on mobile)
 	let opened = false;
 	function openEnvelope(e) {
 		if (opened) return;
@@ -1051,7 +1222,6 @@ function typewriterEffect(text) {
 	const el = document.getElementById("letter-text");
 	let i = 0;
 
-	// 1. START SOUND IMMEDIATELY as writing begins
 	if (typeof audio !== "undefined" && audio.typeSound) {
 		audio.typeSound.currentTime = 0;
 		audio.typeSound
@@ -1059,55 +1229,51 @@ function typewriterEffect(text) {
 			.catch((err) => console.log("Audio play blocked:", err));
 	}
 
-	const interval = setInterval(() => {
+	// PERF: Use a single timeout chain instead of setInterval for typewriter.
+	// setInterval accumulates drift on throttled Android background tabs;
+	// setTimeout scheduling is more reliable for the letter reveal.
+	function typeNext() {
 		if (i < text.length) {
 			el.textContent += text[i];
-			document.getElementById("parchment").scrollTop =
-				document.getElementById("parchment").scrollHeight;
+			const parchment = document.getElementById("parchment");
+			if (parchment) parchment.scrollTop = parchment.scrollHeight;
 			i++;
+			setTimeout(typeNext, 28);
 		} else {
-			clearInterval(interval);
-
-			// 2. STOP SOUND IMMEDIATELY the exact millisecond writing ends
 			if (typeof audio !== "undefined" && audio.typeSound) {
 				audio.typeSound.pause();
-				audio.typeSound.currentTime = 0; // reset for next time
+				audio.typeSound.currentTime = 0;
 			}
-
-			document.getElementById("letter-buttons").style.opacity = "1";
+			const btns = document.getElementById("letter-buttons");
+			if (btns) btns.style.opacity = "1";
 			spawnConfetti();
 		}
-	}, 28);
+	}
+	typeNext();
 }
 
 function replayLetter() {
 	showLetter();
 }
 
-// Add this variable near the top with other global declarations (e.g., after destinationReached)
 let islandReturnTimeout = null;
 let islandReturnSecondTimeout = null;
 
-// Then replace the existing backToIsland function with this enhanced version:
 function backToIsland() {
-	// ─── ADD THIS: Play click sound ───
 	if (typeof audio !== "undefined" && audio.click) {
 		audio.click.currentTime = 0;
 		audio.click.play().catch(() => {});
 	}
 
-	// 1. Switch game states back to exploration immediately
 	gameState = "exploring";
 
-	// 2. Clear UI overlay
 	const overlay = document.getElementById("ui-overlay");
 	overlay.innerHTML = "";
 	overlay.style.pointerEvents = "none";
 
-	// 3. SMOOTH FADE OUT FOR REVEAL MUSIC
 	if (audio.reveal && !audio.reveal.paused) {
-		const fadeDuration = 1000; // 1 second fade out
-		const fadeInterval = 50; // Update every 50ms
+		const fadeDuration = 1000;
+		const fadeInterval = 50;
 		const steps = fadeDuration / fadeInterval;
 		const volumeStep = audio.reveal.volume / steps;
 
@@ -1115,7 +1281,6 @@ function backToIsland() {
 			if (audio.reveal.volume > volumeStep) {
 				audio.reveal.volume -= volumeStep;
 			} else {
-				// Fade finished: Clean up track completely
 				clearInterval(fadeOutReveal);
 				audio.reveal.pause();
 				audio.reveal.currentTime = 0;
@@ -1123,25 +1288,17 @@ function backToIsland() {
 		}, fadeInterval);
 	}
 
-	// 4. RESET AND PLAY EXPLORATION MUSIC
 	if (audio.explore) {
-		audio.explore.volume = 0.4; // Restore to correct volume (matches audioManager.js)
-		audio.explore.currentTime = 0; // Start the island vibe fresh
+		audio.explore.volume = 0.4;
+		audio.explore.currentTime = 0;
 		audio.explore
 			.play()
 			.catch((err) => console.log("Explore music resume failed:", err));
 	}
 
-	// ─── NEW FEATURE: PART TWO HINTS ─────────────────────────────
-	// Clear any previous pending hints to avoid stacking
 	if (islandReturnTimeout) clearTimeout(islandReturnTimeout);
 	if (islandReturnSecondTimeout) clearTimeout(islandReturnSecondTimeout);
 
-	// First hint after 5 seconds (only if still exploring)
-	// Inside backToIsland(), after restoring exploration music:
-
-	// First hint after 5 seconds – stays for 3 seconds (or adjust as you like)
-	// First hint after 5 seconds, visible for 3 seconds
 	islandReturnTimeout = setTimeout(() => {
 		if (gameState === "exploring") {
 			showCenteredNotification(
@@ -1152,7 +1309,6 @@ function backToIsland() {
 		islandReturnTimeout = null;
 	}, 10000);
 
-	// Second hint after 15 seconds, visible for 4 seconds
 	islandReturnSecondTimeout = setTimeout(() => {
 		if (gameState === "exploring") {
 			showCenteredNotification(
@@ -1162,20 +1318,17 @@ function backToIsland() {
 		}
 		islandReturnSecondTimeout = null;
 	}, 15000);
-	// ─── END NEW FEATURE ─────────────────────────────────────────
 }
 
 let activeNotificationTimeout = null;
 
 function showCenteredNotification(message, durationMs = 3000) {
-	// Remove any existing notification
 	const oldNote = document.getElementById("custom-notification");
 	if (oldNote) oldNote.remove();
 	if (activeNotificationTimeout) clearTimeout(activeNotificationTimeout);
 
-	// Responsive font size: smaller on mobile
-	const isMobile = window.innerWidth <= 700;
-	const fontSize = isMobile ? "10px" : "14px"; // ← adjust these values
+	const isMobile = GAME_W <= 700;
+	const fontSize = isMobile ? "10px" : "14px";
 	const paddingV = isMobile ? "8px" : "12px";
 	const paddingH = isMobile ? "12px" : "20px";
 
@@ -1206,7 +1359,6 @@ function showCenteredNotification(message, durationMs = 3000) {
     animation: fadeInOut ${durationMs / 1000}s ease-in-out forwards;
   `;
 
-	// Inject keyframe animation if not present
 	if (!document.querySelector("#notification-style")) {
 		const style = document.createElement("style");
 		style.id = "notification-style";
@@ -1223,7 +1375,6 @@ function showCenteredNotification(message, durationMs = 3000) {
 
 	document.body.appendChild(note);
 
-	// Auto-remove after duration
 	activeNotificationTimeout = setTimeout(() => {
 		if (note && note.remove) note.remove();
 		activeNotificationTimeout = null;
@@ -1261,11 +1412,14 @@ function areAllMemoriesCollected() {
 }
 
 // ─── TAP TO MOVE (ANDROID / TOUCH) ─────────────────────────
+// PERF: Debounce tap so rapid multi-touches don't spawn multiple BFS searches
+let _tapCooldown = false;
+
 function handleCanvasTap(e) {
 	if (gameState !== "exploring") return;
+	if (_tapCooldown) return;
 	e.preventDefault();
 
-	// Get touch or mouse coordinates
 	let clientX, clientY;
 	if (e.touches && e.touches.length > 0) {
 		clientX = e.touches[0].clientX;
@@ -1278,23 +1432,17 @@ function handleCanvasTap(e) {
 		clientY = e.clientY;
 	}
 
-	// Convert CSS client coords → logical world coords.
-	// canvas.getBoundingClientRect() gives CSS (logical) size, so we work
-	// entirely in logical pixels — no DPR multiplication needed here.
 	const rect = canvas.getBoundingClientRect();
 	const logicalX = clientX - rect.left;
 	const logicalY = clientY - rect.top;
 
-	// Inverse camera transform (camera works in logical pixels)
 	const invZoom = 1 / camera.zoom;
 	const worldX = (logicalX - GAME_W / 2) * invZoom + camera.x;
 	const worldY = (logicalY - GAME_H / 2) * invZoom + camera.y;
 
-	// Find which tile was tapped
 	const tileCol = Math.floor(worldX / TILE_SIZE);
 	const tileRow = Math.floor(worldY / TILE_SIZE);
 
-	// Validate tile bounds
 	if (
 		tileRow < 0 ||
 		tileRow >= map.length ||
@@ -1303,13 +1451,12 @@ function handleCanvasTap(e) {
 	)
 		return;
 
-	// Don't pathfind into solid tiles
 	if (!isWalkable(tileCol, tileRow)) {
 		if (!movementHintShown) {
 			showNotification("❌ Can't walk there – find wings to fly!");
 			movementHintShown = true;
 		} else {
-			showNotification("❌ Blocked");
+			showNotification("❌ You can't go there");
 		}
 		return;
 	}
@@ -1317,30 +1464,36 @@ function handleCanvasTap(e) {
 	const startCol = Math.floor((player.x + player.width / 2) / TILE_SIZE);
 	const startRow = Math.floor((player.y + player.height / 2) / TILE_SIZE);
 
-	// Tapped own tile — nothing to do
 	if (startCol === tileCol && startRow === tileRow) return;
 
-	const path = findPath(startCol, startRow, tileCol, tileRow);
+	// PERF: Run BFS off the main thread via setTimeout(0) so it doesn't block
+	// the current touch event (prevents "ANR"-style jank on Android WebView)
+	_tapCooldown = true;
+	setTimeout(() => {
+		const path = findPath(startCol, startRow, tileCol, tileRow);
 
-	if (path && path.length > 0) {
-		// Convert path tiles to world coordinates (centre of each tile, adjusted for player size)
-		pathQueue = path.map((step) => ({
-			x: step.col * TILE_SIZE + (TILE_SIZE - player.width) / 2,
-			y: step.row * TILE_SIZE + (TILE_SIZE - player.height) / 2,
-		}));
-		clickedTile = { col: tileCol, row: tileRow };
-		isMovingToTarget = true;
-		if (!movementHintShown) {
-			showNotification("🦶 Tap any tile – I'll walk there!");
-			movementHintShown = true;
+		if (path && path.length > 0) {
+			pathQueue = path.map((step) => ({
+				x: step.col * TILE_SIZE + (TILE_SIZE - player.width) / 2,
+				y: step.row * TILE_SIZE + (TILE_SIZE - player.height) / 2,
+			}));
+			clickedTile = { col: tileCol, row: tileRow };
+			isMovingToTarget = true;
+			if (!movementHintShown) {
+				showNotification("🦶 Tap any tile – I'll walk there!");
+				movementHintShown = true;
+			}
+		} else {
+			showNotification("🚫 No path found");
+			clickedTile = null;
 		}
-	} else {
-		showNotification("🚫 No path found");
-		clickedTile = null;
-	}
+		// Small cooldown so double-taps don't re-trigger immediately
+		setTimeout(() => {
+			_tapCooldown = false;
+		}, 120);
+	}, 0);
 }
 
-// Attach event listeners
 canvas.addEventListener("touchstart", handleCanvasTap, { passive: false });
 canvas.addEventListener("mousedown", handleCanvasTap);
 

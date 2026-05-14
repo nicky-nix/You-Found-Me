@@ -7,6 +7,16 @@ const fogCtx = fogCanvas.getContext("2d");
 let GAME_W = window.innerWidth;
 let GAME_H = window.innerHeight;
 let destinationReached = false; // This tracks if the final event already happened
+let rawJoyX = 0,
+	rawJoyY = 0;
+let smoothJoyX = 0,
+	smoothJoyY = 0;
+let targetX = null,
+	targetY = null; // world coordinates of destination
+let pathQueue = []; // tiles to walk through (x, y)
+let isMovingToTarget = false;
+let movementHintShown = false;
+let clickedTile = null; // stores { col, row } of tapped destination
 
 canvas.width = GAME_W;
 canvas.height = GAME_H;
@@ -15,12 +25,6 @@ fogCanvas.height = GAME_H;
 
 const joystickZone = document.getElementById("joystick-zone");
 
-function setJoystickEnabled(enabled) {
-	joystickZone.style.pointerEvents = enabled ? "all" : "none";
-}
-
-setJoystickEnabled(false);
-
 let joyX = 0,
 	joyY = 0;
 let joystickInstance = null;
@@ -28,8 +32,7 @@ let joystickInstance = null;
 let renderScale = 1;
 
 function uiPx(px) {
-	const downscale = Math.min(renderScale, 1);
-	return Math.max(1, Math.round(px / downscale));
+	return Math.max(1, Math.round(px * renderScale));
 }
 
 function clamp(n, min, max) {
@@ -43,6 +46,7 @@ const camera = {
 };
 
 // ─── RESPONSIVE RESIZE (FULL SCREEN FILL) ───────────────────
+// Replace the resizeGame function inside game.js with this:
 function resizeGame() {
 	const container = document.getElementById("game-container");
 	const W = window.innerWidth;
@@ -50,24 +54,41 @@ function resizeGame() {
 
 	GAME_W = W;
 	GAME_H = H;
-	renderScale = 1;
 
-	canvas.width = GAME_W;
-	canvas.height = GAME_H;
-	fogCanvas.width = GAME_W;
-	fogCanvas.height = GAME_H;
+	// Calculate baseline resolution scaling factor
+	const baselineW = 1280;
+	const baselineH = 720;
+	const scaleX = W / baselineW;
+	const scaleY = H / baselineH;
+
+	// Using Math.min prevents the UI from expanding beyond boundary boxes on extreme aspect ratios
+	renderScale = Math.max(0.65, Math.min(1.35, Math.min(scaleX, scaleY)));
+
+	// Handle High-DPI screens (Retina / Android Displays)
+	const dpr = window.devicePixelRatio || 1;
+
+	// Set internal resolution scaled by DPR
+	canvas.width = GAME_W * dpr;
+	canvas.height = GAME_H * dpr;
+
+	// Keep CSS display size matching the logical layout dimensions
+	canvas.style.width = GAME_W + "px";
+	canvas.style.height = GAME_H + "px";
+
+	fogCanvas.width = GAME_W * dpr;
+	fogCanvas.height = GAME_H * dpr;
+	fogCanvas.style.width = GAME_W + "px";
+	fogCanvas.style.height = GAME_H + "px";
+
+	// Normalize context scales back to logical units
+	// Use setTransform (not scale) to prevent compounding on every resize call
+	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+	fogCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
 	container.style.width = W + "px";
 	container.style.height = H + "px";
-
-	if (joystickInstance && joystickInstance.destroy) {
-		joystickInstance.destroy();
-		joystickInstance = null;
-		joyX = 0;
-		joyY = 0;
-		initJoystick();
-	}
 }
+
 window.addEventListener("resize", resizeGame);
 resizeGame();
 
@@ -81,7 +102,7 @@ function update() {
 	if (gameState === "exploring") {
 		updatePlayer();
 		updateCamera();
-		//updateWings();
+		updateWings();
 		updateMemories();
 		updateParticles();
 		checkDestination();
@@ -97,7 +118,7 @@ function update() {
 
 function updateCamera() {
 	const isMobile = window.innerWidth < 700;
-	camera.zoom = isMobile ? 1 : 1;
+	camera.zoom = isMobile ? 0.6 : 1;
 
 	const worldW = map[0].length * TILE_SIZE;
 	const worldH = map.length * TILE_SIZE;
@@ -112,13 +133,14 @@ function updateCamera() {
 }
 
 function applyCameraTransform(targetCtx) {
+	const dpr = window.devicePixelRatio || 1;
 	targetCtx.setTransform(
-		camera.zoom,
+		camera.zoom * dpr,
 		0,
 		0,
-		camera.zoom,
-		GAME_W / 2 - camera.x * camera.zoom,
-		GAME_H / 2 - camera.y * camera.zoom,
+		camera.zoom * dpr,
+		Math.round((GAME_W / 2 - camera.x * camera.zoom) * dpr),
+		Math.round((GAME_H / 2 - camera.y * camera.zoom) * dpr),
 	);
 }
 
@@ -150,10 +172,24 @@ function draw() {
 		ctx.save();
 		applyCameraTransform(ctx);
 		drawMap();
-		//drawWings();
+		drawWings();
 		drawPlayer();
 		drawParticles();
 		drawMemoryMarkers();
+		if (clickedTile) {
+			const tx = clickedTile.col * TILE_SIZE;
+			const ty = clickedTile.row * TILE_SIZE;
+			const pulse = 0.35 + Math.abs(Math.sin(Date.now() / 250)) * 0.4;
+			ctx.save();
+			ctx.globalAlpha = pulse;
+			ctx.fillStyle = "#ffd700";
+			ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+			ctx.globalAlpha = 1;
+			ctx.strokeStyle = "#ffffff";
+			ctx.lineWidth = 2;
+			ctx.strokeRect(tx + 1, ty + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+			ctx.restore();
+		}
 		ctx.restore();
 		drawFog();
 		drawMemoryPopup();
@@ -161,6 +197,23 @@ function draw() {
 			drawHUD();
 			drawNotification();
 		}
+	}
+
+	if (pathQueue.length > 0) {
+		const next = pathQueue[0];
+		ctx.save();
+		applyCameraTransform(ctx);
+		ctx.fillStyle = "rgba(255, 255, 0, 0.5)";
+		ctx.beginPath();
+		ctx.arc(
+			next.x + player.width / 2,
+			next.y + player.height / 2,
+			8,
+			0,
+			Math.PI * 2,
+		);
+		ctx.fill();
+		ctx.restore();
 	}
 }
 
@@ -186,11 +239,11 @@ function drawMap() {
 
 // ─── PLAYER ──────────────────────────────────────────────────
 const player = {
-	x: 44 * 32 + 8, // col 44 — bottom-center beach spawn
-	y: 67 * 32 + 8, // row 67 — beach spawn
+	x: 20 * 32 + 8, // col 20 — south beach path spawn
+	y: 64 * 32 + 8, // row 64 — beach spawn
 	width: 16,
 	height: 16,
-	speed: 3.2,
+	speed: 3,
 	color: "White",
 	hasWings: false,
 };
@@ -213,6 +266,67 @@ function getTileAt(px, py) {
 	return map[row][col];
 }
 
+// ─── PATHFINDING (BFS) ─────────────────────────────────────
+function isWalkable(col, row) {
+	if (row < 0 || row >= map.length || col < 0 || col >= map[0].length)
+		return false;
+	if (player.hasWings) return true;
+	const tile = map[row][col];
+	return tile !== 0 && tile !== 2;
+}
+
+function findPath(startCol, startRow, endCol, endRow) {
+	// Same tile — no movement needed
+	if (startCol === endCol && startRow === endRow) return [];
+
+	// Destination must be walkable
+	if (!isWalkable(endCol, endRow)) return null;
+
+	const queue = [{ col: startCol, row: startRow, path: [] }];
+	const visited = new Set();
+	visited.add(`${startCol},${startRow}`);
+
+	// 8-directional movement so diagonal paths work naturally
+	const dirs = [
+		[0, -1],
+		[1, 0],
+		[0, 1],
+		[-1, 0], // cardinal
+		[1, -1],
+		[1, 1],
+		[-1, 1],
+		[-1, -1], // diagonal
+	];
+
+	while (queue.length > 0) {
+		const { col, row, path } = queue.shift();
+
+		for (const [dc, dr] of dirs) {
+			const newCol = col + dc;
+			const newRow = row + dr;
+
+			if (!isWalkable(newCol, newRow)) continue;
+
+			// For diagonal steps, both orthogonal neighbours must also be walkable
+			// (prevents cutting corners through solid tile edges)
+			if (dc !== 0 && dr !== 0) {
+				if (!isWalkable(col + dc, row) || !isWalkable(col, row + dr)) continue;
+			}
+
+			const key = `${newCol},${newRow}`;
+			if (visited.has(key)) continue;
+			visited.add(key);
+
+			const newPath = [...path, { col: newCol, row: newRow }];
+
+			if (newCol === endCol && newRow === endRow) return newPath;
+
+			queue.push({ col: newCol, row: newRow, path: newPath });
+		}
+	}
+	return null; // no path
+}
+
 function isSolid(tile) {
 	if (player.hasWings) return false;
 	return tile === 0 || tile === 2;
@@ -223,38 +337,76 @@ function updatePlayer() {
 		dy = 0;
 	const spd = player.hasWings ? player.speed * 3 : player.speed;
 
+	// Keyboard controls (always active)
 	if (keys["ArrowUp"] || keys["w"] || keys["W"]) dy -= spd;
 	if (keys["ArrowDown"] || keys["s"] || keys["S"]) dy += spd;
 	if (keys["ArrowLeft"] || keys["a"] || keys["A"]) dx -= spd;
 	if (keys["ArrowRight"] || keys["d"] || keys["D"]) dx += spd;
 
-	dx += joyX * spd;
-	dy += joyY * spd;
-
-	if (dx !== 0 && dy !== 0) {
-		dx *= 0.707;
-		dy *= 0.707;
+	// If any keyboard key is pressed, cancel auto-move
+	if (dx !== 0 || dy !== 0) {
+		isMovingToTarget = false;
+		pathQueue = [];
+		targetX = targetY = null;
+		clickedTile = null;
 	}
 
-	const nextX = player.x + dx;
-	const nextY = player.y + dy;
+	// Auto-move toward next target in queue
+	if (isMovingToTarget && pathQueue.length > 0) {
+		const target = pathQueue[0];
+		const dxToTarget = target.x - player.x;
+		const dyToTarget = target.y - player.y;
+		const distance = Math.hypot(dxToTarget, dyToTarget);
 
-	if (
-		!isSolid(getTileAt(nextX, player.y)) &&
-		!isSolid(getTileAt(nextX + player.width, player.y)) &&
-		!isSolid(getTileAt(nextX, player.y + player.height)) &&
-		!isSolid(getTileAt(nextX + player.width, player.y + player.height))
-	) {
-		player.x = nextX;
+		// Snap threshold: half a tile so we never overshoot and oscillate
+		if (distance <= TILE_SIZE / 2) {
+			player.x = target.x;
+			player.y = target.y;
+			pathQueue.shift();
+			if (pathQueue.length === 0) {
+				isMovingToTarget = false;
+				clickedTile = null;
+			}
+		} else {
+			// Move toward waypoint — skip the collision system so BFS-verified
+			// waypoints are always reachable (collision already baked into BFS)
+			const norm = spd / distance;
+			player.x += dxToTarget * norm;
+			player.y += dyToTarget * norm;
+		}
+		// Auto-move provides its own dx/dy — skip the keyboard movement block below
+		return;
+	} else if (!isMovingToTarget || pathQueue.length === 0) {
+		isMovingToTarget = false;
 	}
 
-	if (
-		!isSolid(getTileAt(player.x, nextY)) &&
-		!isSolid(getTileAt(player.x + player.width, nextY)) &&
-		!isSolid(getTileAt(player.x, nextY + player.height)) &&
-		!isSolid(getTileAt(player.x + player.width, nextY + player.height))
-	) {
-		player.y = nextY;
+	// Apply movement (with collision)
+	if (dx !== 0 || dy !== 0) {
+		if (dx !== 0 && dy !== 0) {
+			dx *= 0.707;
+			dy *= 0.707;
+		}
+
+		const nextX = player.x + dx;
+		const nextY = player.y + dy;
+
+		if (
+			!isSolid(getTileAt(nextX, player.y)) &&
+			!isSolid(getTileAt(nextX + player.width, player.y)) &&
+			!isSolid(getTileAt(nextX, player.y + player.height)) &&
+			!isSolid(getTileAt(nextX + player.width, player.y + player.height))
+		) {
+			player.x = nextX;
+		}
+
+		if (
+			!isSolid(getTileAt(player.x, nextY)) &&
+			!isSolid(getTileAt(player.x + player.width, nextY)) &&
+			!isSolid(getTileAt(player.x, nextY + player.height)) &&
+			!isSolid(getTileAt(player.x + player.width, nextY + player.height))
+		) {
+			player.y = nextY;
+		}
 	}
 }
 
@@ -299,87 +451,6 @@ function drawFog() {
 	fogCtx.globalCompositeOperation = "source-over";
 }
 
-// ─── HUD ─────────────────────────────────────────────────────
-function getGameCoords() {
-	return {
-		x: Math.floor(player.x / TILE_SIZE),
-		z: -Math.floor(player.y / TILE_SIZE),
-	};
-}
-
-function drawHUD() {
-	const coords = getGameCoords();
-
-	fogCtx.fillStyle = "rgba(0,0,0,0.7)";
-	roundRect(fogCtx, GAME_W - uiPx(168), uiPx(10), uiPx(158), uiPx(44), uiPx(6));
-
-	fogCtx.font = `${uiPx(10)}px "Press Start 2P"`;
-	fogCtx.fillStyle = "#ffd700";
-	fogCtx.fillText(`X: ${coords.x}`, GAME_W - uiPx(152), uiPx(29));
-	fogCtx.fillText(`Z: ${coords.z}`, GAME_W - uiPx(152), uiPx(47));
-
-	if (player.hasWings) {
-		fogCtx.fillStyle = "rgba(255,255,255,0.15)";
-		roundRect(fogCtx, uiPx(10), uiPx(10), uiPx(80), uiPx(24), uiPx(4));
-		fogCtx.font = `${uiPx(7)}px "Press Start 2P"`;
-		fogCtx.fillStyle = "#ffffff";
-		fogCtx.fillText("🪽 FLYING", uiPx(16), uiPx(26));
-	}
-
-	drawProgressHeart();
-}
-
-let notification = null;
-let notifTimer = 0;
-
-function showNotification(msg) {
-	notification = msg;
-	notifTimer = 180;
-}
-
-function drawNotification() {
-	if (!notification || notifTimer <= 0) return;
-	notifTimer--;
-
-	const alpha = Math.min(1, notifTimer / 30);
-	fogCtx.globalAlpha = alpha;
-	fogCtx.fillStyle = "rgba(10,8,5,0.9)";
-	fogCtx.strokeStyle = "#ffd700";
-	fogCtx.lineWidth = uiPx(2);
-	roundRect(
-		fogCtx,
-		uiPx(20),
-		GAME_H - uiPx(80),
-		GAME_W - uiPx(40),
-		uiPx(30),
-		uiPx(6),
-	);
-	fogCtx.stroke();
-	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
-	fogCtx.fillStyle = "#fff8dc";
-	fogCtx.textAlign = "center";
-	fogCtx.fillText(notification, GAME_W / 2, GAME_H - uiPx(59));
-	fogCtx.textAlign = "left";
-	fogCtx.globalAlpha = 1;
-
-	if (notifTimer <= 0) notification = null;
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-	ctx.beginPath();
-	ctx.moveTo(x + r, y);
-	ctx.lineTo(x + w - r, y);
-	ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-	ctx.lineTo(x + w, y + h - r);
-	ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-	ctx.lineTo(x + r, y + h);
-	ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-	ctx.lineTo(x, y + r);
-	ctx.quadraticCurveTo(x, y, x + r, y);
-	ctx.closePath();
-	ctx.fill();
-}
-
 // ─── INTRO ───────────────────────────────────────────────────
 let introStep = 0;
 
@@ -391,7 +462,13 @@ function drawIntro() {
 	ctx.fillStyle = "#050508";
 	ctx.fillRect(0, 0, GAME_W, GAME_H);
 
-	const fontPx = uiPx(11);
+	// Detect if the user is on PC (wider screens)
+	const isPC = window.innerWidth >= 700;
+
+	// Dynamic font size and line height based on device type
+	const fontPx = isPC ? uiPx(20) : uiPx(11); // 20px on PC, 11px on mobile
+	const lineStep = isPC ? uiPx(44) : uiPx(24); // Increased line spacing for PC
+
 	ctx.font = `${fontPx}px "Press Start 2P"`;
 	ctx.textAlign = "center";
 
@@ -404,7 +481,10 @@ function drawIntro() {
 	let highlightedLineIndices = new Set(); // Tracks which line index gets the yellow accent
 
 	// ─── AUTO-WRAP LONG LINES DYNAMICALLY ───
-	const maxTextWidth = GAME_W - uiPx(40); // 20px padding on each side
+	// Capped at 900px on PC so text doesn't stretch awkwardly across wide monitors
+	const maxTextWidth = isPC
+		? Math.min(GAME_W - uiPx(120), uiPx(900))
+		: GAME_W - uiPx(40);
 
 	structuralLines.forEach((structLine, structIndex) => {
 		const words = structLine.split(" ");
@@ -435,14 +515,16 @@ function drawIntro() {
 	});
 
 	// ─── RENDER BALANCED LINES TO VERTICAL CENTER ───
-	const lineStep = uiPx(24); // Slightly tighter spacing for multi-line wraps
 	const totalHeight = renderedLines.length * lineStep;
-	const startY = (GAME_H - totalHeight) / 2 + uiPx(12);
+	const startY = Math.round((GAME_H - totalHeight) / 2 + lineStep / 2); // Snap to integer pixels
 
 	renderedLines.forEach((line, i) => {
-		// Highlight the last original structural line group (e.g. tap prompt / accent lines) in gold
 		ctx.fillStyle = highlightedLineIndices.has(i) ? "#ffd700" : "#e8e4d4";
-		ctx.fillText(line, GAME_W / 2, startY + i * lineStep);
+		ctx.fillText(
+			line,
+			Math.round(GAME_W / 2),
+			Math.round(startY + i * lineStep),
+		); // Round horizontal & vertical placements
 	});
 
 	ctx.globalAlpha = 1;
@@ -467,8 +549,10 @@ function advanceIntro() {
 	if (gameState !== "intro") return;
 
 	// ─── ADD THIS: Play click sound ───
-	audio.click.currentTime = 0;
-	audio.click.play().catch((err) => console.log("Click blocked:", err));
+	if (typeof audio !== "undefined" && audio.click) {
+		audio.click.currentTime = 0;
+		audio.click.play().catch((err) => console.log("Click blocked:", err));
+	}
 
 	// FORCE PLAY HERE: Mobile browsers will allow it because this runs
 	// directly inside a user input event listener (click/keydown).
@@ -488,11 +572,14 @@ let titleTimer = 0;
 
 function updateTitle() {
 	titleTimer++;
-	if (titleTimer > 350) {
+	if (titleTimer > 210) {
 		gameState = "exploring";
 		titleTimer = 0;
 		updateCamera();
-		initJoystick();
+
+		// Show movement hint automatically as soon as the player can move
+		showNotification("🦶 Tap any tile – I'll walk there!");
+		movementHintShown = true;
 
 		// Double check: Ensure exploration music starts right here!
 		audio.explore
@@ -517,7 +604,11 @@ function drawTitleCard() {
 	ctx.shadowBlur = 20;
 	ctx.shadowOffsetX = 0;
 	ctx.shadowOffsetY = 8;
-	ctx.fillText("💌", GAME_W / 2, GAME_H / 2 - uiPx(50) + floatOffset);
+	ctx.fillText(
+		"💌",
+		Math.round(GAME_W / 2),
+		Math.round(GAME_H / 2 - uiPx(50) + floatOffset),
+	);
 
 	ctx.shadowBlur = 0;
 	ctx.shadowOffsetY = 0;
@@ -528,24 +619,36 @@ function drawTitleCard() {
 	ctx.shadowColor = "#ffd700";
 	ctx.shadowBlur = 15;
 	ctx.fillStyle = "#ff8c00";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + uiPx(50));
+	ctx.fillText(
+		"YOU FOUND ME",
+		Math.round(GAME_W / 2),
+		Math.round(GAME_H / 2 + uiPx(50)),
+	);
 
 	ctx.shadowBlur = 0;
 	ctx.fillStyle = "#ffd700";
-	ctx.fillText("YOU FOUND ME", GAME_W / 2, GAME_H / 2 + uiPx(50));
+	ctx.fillText(
+		"YOU FOUND ME",
+		Math.round(GAME_W / 2),
+		Math.round(GAME_H / 2 + uiPx(50)),
+	);
 
 	ctx.font = `${uiPx(8)}px "Press Start 2P"`;
 	ctx.globalAlpha = 0.4 + Math.abs(Math.sin(time / 600)) * 0.4;
 	ctx.fillStyle = "#8a7a5c";
-	ctx.fillText("charting island coordinates...", GAME_W / 2, GAME_H - uiPx(60));
+	ctx.fillText(
+		"charting island coordinates...",
+		Math.round(GAME_W / 2),
+		Math.round(GAME_H - uiPx(60)),
+	);
 
 	ctx.restore();
 }
 
 // ─── WINGS ───────────────────────────────────────────────────
 const wings = {
-	x: 8 * 32 + 8,
-	y: 14 * 32 + 8,
+	x: 53 * 32 + 8,
+	y: 27 * 32 + 8,
 	width: 16,
 	height: 16,
 	collected: false,
@@ -555,12 +658,21 @@ function updateWings() {
 	if (wings.collected) return;
 	const dx = player.x - wings.x;
 	const dy = player.y - wings.y;
-	if (Math.sqrt(dx * dx + dy * dy) < 20) {
-		wings.collected = true;
-		player.hasWings = true;
 
-		// ─── UPDATED: Put the wing notification into the safe message queue ───
-		queueMessage("Wings collected! You can fly!");
+	if (Math.sqrt(dx * dx + dy * dy) < 20) {
+		// Check if all memories have been found
+		if (areAllMemoriesCollected()) {
+			wings.collected = true;
+			player.hasWings = true;
+
+			// Put the wing notification into the safe message queue
+			queueMessage(STORY_WINGS_LINES);
+		} else {
+			// Only queue the reminder if there isn't a message currently active or queued
+			if (!isDisplayingMemory && memoryQueue.length === 0) {
+				queueMessage("You forgot how to fly, get all the memories first");
+			}
+		}
 	}
 }
 
@@ -594,6 +706,11 @@ const memories = STORY_MEMORIES.map((m) => ({
 	text: m.lines,
 }));
 
+// BUG FIX: Removed hardcoded 5th mystery memory — it was placed on an impassable
+// forest tile (col 35, row 40 = tile type 2) making it impossible to collect,
+// which permanently prevented areAllMemoriesCollected() from returning true
+// and softlocked wings pickup and the ending. Add extra memories in storyline.js.
+
 let activeMemory = null;
 let memoryTimer = 0;
 
@@ -610,15 +727,23 @@ function updateMemories() {
 				.play()
 				.catch((err) => console.log("Sound blocked:", err));
 
-			// ─── UPDATED: Send memory text array to the unified queue ───
+			// 1. Queue the regular text assigned to this specific memory orb
 			queueMessage(mem.text);
+
+			// 2. CHECK IF THIS WAS THE LAST ONE:
+			// It doesn't matter which orb it is; if all are now collected, append the unlock message!
+			if (areAllMemoriesCollected()) {
+				queueMessage([
+					"✨ A strange warmth flows through you...",
+					"You know how to fly now! Go find the wings!",
+				]);
+			}
 		}
 	});
 
 	if (memoryTimer > 0) {
 		memoryTimer--;
 	} else if (isDisplayingMemory) {
-		// Box timer finished, reset flags and pull next item in line seamlessly
 		activeMemory = null;
 		isDisplayingMemory = false;
 		processNextMemory();
@@ -660,30 +785,87 @@ function drawMemoryMarkers() {
 function drawMemoryPopup() {
 	if (!activeMemory || memoryTimer <= 0) return;
 
+	const isPC = window.innerWidth >= 700;
 	const alpha = Math.min(1, memoryTimer / 40);
-	const lines = activeMemory;
-	const padX = uiPx(20);
-	const padY = uiPx(12);
-	const lineH = uiPx(18);
-	const boxW = GAME_W - uiPx(40);
-	const boxH = lines.length * lineH + padY * 2;
-	const boxX = (GAME_W - boxW) / 2; // centered horizontally
-	const boxY = GAME_H - boxH - uiPx(50);
+	const rawLines = activeMemory;
+
+	const fontSize = isPC ? uiPx(16) : uiPx(9);
+	const lineH = isPC ? uiPx(30) : uiPx(20);
+	const padX = isPC ? uiPx(40) : uiPx(20);
+	const padY = isPC ? uiPx(25) : uiPx(12);
+	const textYOffset = isPC ? uiPx(22) : uiPx(12);
+
+	const boxW = isPC
+		? Math.min(GAME_W - uiPx(100), uiPx(750))
+		: GAME_W - uiPx(40);
 
 	fogCtx.save();
+	fogCtx.font = `${fontSize}px "Press Start 2P"`;
+
+	// Wrap lines
+	let lines = [];
+	const maxTextWidth = boxW - padX * 2;
+
+	rawLines.forEach((structLine) => {
+		const words = structLine.split(" ");
+		let currentLine = "";
+
+		words.forEach((word) => {
+			let testLine = currentLine + (currentLine === "" ? "" : " ") + word;
+			let testWidth = fogCtx.measureText(testLine).width;
+
+			if (testWidth > maxTextWidth && currentLine !== "") {
+				lines.push(currentLine);
+				currentLine = word;
+			} else {
+				currentLine = testLine;
+			}
+		});
+		if (currentLine !== "") lines.push(currentLine);
+	});
+
+	const boxH = lines.length * lineH + padY * 2;
+	const boxX = Math.round((GAME_W - boxW) / 2);
+	const boxY = Math.round(GAME_H - boxH - uiPx(50));
+
 	fogCtx.globalAlpha = alpha;
-	fogCtx.fillStyle = "rgba(10,8,5,0.95)";
-	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(8));
-	fogCtx.strokeStyle = "#ffd700";
+
+	// Light cream background
+	fogCtx.fillStyle = "rgba(255, 248, 225, 0.96)";
+	roundRect(fogCtx, boxX, boxY, boxW, boxH, uiPx(10));
+
+	// Decorative border (soft coral + mint accent line)
+	fogCtx.strokeStyle = "#FFB7B2";
 	fogCtx.lineWidth = uiPx(2);
+	fogCtx.beginPath();
+	fogCtx.moveTo(boxX + uiPx(10), boxY);
+	fogCtx.lineTo(boxX + boxW - uiPx(10), boxY);
+	fogCtx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + uiPx(10));
+	fogCtx.lineTo(boxX + boxW, boxY + boxH - uiPx(10));
+	fogCtx.quadraticCurveTo(
+		boxX + boxW,
+		boxY + boxH,
+		boxX + boxW - uiPx(10),
+		boxY + boxH,
+	);
+	fogCtx.lineTo(boxX + uiPx(10), boxY + boxH);
+	fogCtx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - uiPx(10));
+	fogCtx.lineTo(boxX, boxY + uiPx(10));
+	fogCtx.quadraticCurveTo(boxX, boxY, boxX + uiPx(10), boxY);
+	fogCtx.closePath();
 	fogCtx.stroke();
 
-	fogCtx.font = `${uiPx(8)}px "Press Start 2P"`;
-	fogCtx.fillStyle = "#fff8dc";
-	fogCtx.textAlign = "center";
+	// LEFT‑ALIGNED text inside the popup
+	fogCtx.fillStyle = "#2D3E50";
+	fogCtx.textAlign = "left";
 	lines.forEach((line, i) => {
-		fogCtx.fillText(line, GAME_W / 2, boxY + padY + uiPx(12) + i * lineH);
+		fogCtx.fillText(
+			line,
+			Math.round(boxX + padX),
+			Math.round(boxY + padY + textYOffset + i * lineH),
+		);
 	});
+
 	fogCtx.textAlign = "left";
 	fogCtx.restore();
 }
@@ -705,7 +887,9 @@ function checkDestination() {
 			destinationReached = true;
 			gameState = "digging";
 			startRevealSequence();
-		} else {
+		} else if (!isDisplayingMemory && memoryQueue.length === 0) {
+			// Only queue the "collect memories first" message if nothing else is queued,
+			// preventing it from firing every frame the player stands on the tile
 			queueMessage(STORY_COLLECT_FIRST);
 		}
 	}
@@ -769,7 +953,6 @@ function startRevealSequence() {
 function showEnvelope() {
 	const overlay = document.getElementById("ui-overlay");
 	overlay.style.pointerEvents = "all";
-	setJoystickEnabled(false);
 	overlay.innerHTML = `
     <div id="envelope-container" style="
         display: flex;
@@ -837,7 +1020,6 @@ const letterContent = STORY_LETTER;
 
 function showLetter() {
 	const overlay = document.getElementById("ui-overlay");
-	setJoystickEnabled(false);
 	overlay.innerHTML = `
         <div id="letter-container">
             <div id="parchment">
@@ -902,14 +1084,20 @@ function replayLetter() {
 	showLetter();
 }
 
+// Add this variable near the top with other global declarations (e.g., after destinationReached)
+let islandReturnTimeout = null;
+let islandReturnSecondTimeout = null;
+
+// Then replace the existing backToIsland function with this enhanced version:
 function backToIsland() {
 	// ─── ADD THIS: Play click sound ───
-	audio.click.currentTime = 0;
-	audio.click.play().catch(() => {});
+	if (typeof audio !== "undefined" && audio.click) {
+		audio.click.currentTime = 0;
+		audio.click.play().catch(() => {});
+	}
 
 	// 1. Switch game states back to exploration immediately
 	gameState = "exploring";
-	setJoystickEnabled(true);
 
 	// 2. Clear UI overlay
 	const overlay = document.getElementById("ui-overlay");
@@ -937,12 +1125,109 @@ function backToIsland() {
 
 	// 4. RESET AND PLAY EXPLORATION MUSIC
 	if (audio.explore) {
-		audio.explore.volume = 1.0; // Bring volume back to max
+		audio.explore.volume = 0.4; // Restore to correct volume (matches audioManager.js)
 		audio.explore.currentTime = 0; // Start the island vibe fresh
 		audio.explore
 			.play()
 			.catch((err) => console.log("Explore music resume failed:", err));
 	}
+
+	// ─── NEW FEATURE: PART TWO HINTS ─────────────────────────────
+	// Clear any previous pending hints to avoid stacking
+	if (islandReturnTimeout) clearTimeout(islandReturnTimeout);
+	if (islandReturnSecondTimeout) clearTimeout(islandReturnSecondTimeout);
+
+	// First hint after 5 seconds (only if still exploring)
+	// Inside backToIsland(), after restoring exploration music:
+
+	// First hint after 5 seconds – stays for 3 seconds (or adjust as you like)
+	// First hint after 5 seconds, visible for 3 seconds
+	islandReturnTimeout = setTimeout(() => {
+		if (gameState === "exploring") {
+			showCenteredNotification(
+				"✨ A strange energy lingers… Part Two is calling.",
+				7000,
+			);
+		}
+		islandReturnTimeout = null;
+	}, 10000);
+
+	// Second hint after 15 seconds, visible for 4 seconds
+	islandReturnSecondTimeout = setTimeout(() => {
+		if (gameState === "exploring") {
+			showCenteredNotification(
+				"💌 The waves whisper a secret… your journey is far from over.",
+				7000,
+			);
+		}
+		islandReturnSecondTimeout = null;
+	}, 15000);
+	// ─── END NEW FEATURE ─────────────────────────────────────────
+}
+
+let activeNotificationTimeout = null;
+
+function showCenteredNotification(message, durationMs = 3000) {
+	// Remove any existing notification
+	const oldNote = document.getElementById("custom-notification");
+	if (oldNote) oldNote.remove();
+	if (activeNotificationTimeout) clearTimeout(activeNotificationTimeout);
+
+	// Responsive font size: smaller on mobile
+	const isMobile = window.innerWidth <= 700;
+	const fontSize = isMobile ? "10px" : "14px"; // ← adjust these values
+	const paddingV = isMobile ? "8px" : "12px";
+	const paddingH = isMobile ? "12px" : "20px";
+
+	const note = document.createElement("div");
+	note.id = "custom-notification";
+	note.innerText = message;
+	note.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    backdrop-filter: blur(10px);
+    color: #ffd700;
+    font-family: 'Press Start 2P', monospace;
+    font-size: ${fontSize};
+    padding: ${paddingV} ${paddingH};
+    border-radius: 12px;
+    border: 1px solid #ffd700;
+    z-index: 10000;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 85vw;
+    pointer-events: none;
+    line-height: 1.5;
+    box-sizing: border-box;
+    animation: fadeInOut ${durationMs / 1000}s ease-in-out forwards;
+  `;
+
+	// Inject keyframe animation if not present
+	if (!document.querySelector("#notification-style")) {
+		const style = document.createElement("style");
+		style.id = "notification-style";
+		style.textContent = `
+      @keyframes fadeInOut {
+        0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+        15% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        85% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); visibility: hidden; }
+      }
+    `;
+		document.head.appendChild(style);
+	}
+
+	document.body.appendChild(note);
+
+	// Auto-remove after duration
+	activeNotificationTimeout = setTimeout(() => {
+		if (note && note.remove) note.remove();
+		activeNotificationTimeout = null;
+	}, durationMs);
 }
 
 function spawnConfetti() {
@@ -963,49 +1248,6 @@ function spawnConfetti() {
 	setTimeout(() => confetti.remove(), 4500);
 }
 
-// ─── JOYSTICK ────────────────────────────────────────────────
-// ─── JOYSTICK INITIALIZATION ────────────────────────────────
-function initJoystick() {
-	// Simple check to ensure we are on a touch-capable device
-	if (!("ontouchstart" in window || navigator.maxTouchPoints > 0)) return;
-	if (joystickInstance) return;
-
-	setJoystickEnabled(true);
-	joystickInstance = nipplejs.create({
-		zone: document.getElementById("joystick-zone"), // CHANGE: Target joystick-zone directly
-		mode: "static",
-		position: { left: "15%", bottom: "18%" },
-		color: "rgba(255, 215, 0, 0.6)",
-		size: 90,
-	});
-
-	joystickInstance.on("move", (evt, data) => {
-		// NippleJS gives an inversion vector on Y-axis naturally, we normalize it here
-		joyX = data.vector.x;
-		joyY = -data.vector.y;
-	});
-
-	joystickInstance.on("end", () => {
-		joyX = 0;
-		joyY = 0;
-	});
-}
-
-// ─── PROGRESS HEART ──────────────────────────────────────────
-function drawProgressHeart() {
-	const dx = player.x - destination.x;
-	const dy = player.y - destination.y;
-	const dist = Math.sqrt(dx * dx + dy * dy);
-	const pct = 1 - Math.min(dist / 450, 1);
-
-	fogCtx.font = `${uiPx(18)}px serif`;
-	fogCtx.globalAlpha = 0.3;
-	fogCtx.fillText("🤍", uiPx(10), uiPx(50));
-	fogCtx.globalAlpha = pct;
-	fogCtx.fillText("❤️", uiPx(10), uiPx(50));
-	fogCtx.globalAlpha = 1;
-}
-
 // ─── SCREENSHOT ──────────────────────────────────────────────
 function takeScreenshot() {
 	const link = document.createElement("a");
@@ -1017,6 +1259,90 @@ function takeScreenshot() {
 function areAllMemoriesCollected() {
 	return memories.every((mem) => mem.collected === true);
 }
+
+// ─── TAP TO MOVE (ANDROID / TOUCH) ─────────────────────────
+function handleCanvasTap(e) {
+	if (gameState !== "exploring") return;
+	e.preventDefault();
+
+	// Get touch or mouse coordinates
+	let clientX, clientY;
+	if (e.touches && e.touches.length > 0) {
+		clientX = e.touches[0].clientX;
+		clientY = e.touches[0].clientY;
+	} else if (e.changedTouches && e.changedTouches.length > 0) {
+		clientX = e.changedTouches[0].clientX;
+		clientY = e.changedTouches[0].clientY;
+	} else {
+		clientX = e.clientX;
+		clientY = e.clientY;
+	}
+
+	// Convert CSS client coords → logical world coords.
+	// canvas.getBoundingClientRect() gives CSS (logical) size, so we work
+	// entirely in logical pixels — no DPR multiplication needed here.
+	const rect = canvas.getBoundingClientRect();
+	const logicalX = clientX - rect.left;
+	const logicalY = clientY - rect.top;
+
+	// Inverse camera transform (camera works in logical pixels)
+	const invZoom = 1 / camera.zoom;
+	const worldX = (logicalX - GAME_W / 2) * invZoom + camera.x;
+	const worldY = (logicalY - GAME_H / 2) * invZoom + camera.y;
+
+	// Find which tile was tapped
+	const tileCol = Math.floor(worldX / TILE_SIZE);
+	const tileRow = Math.floor(worldY / TILE_SIZE);
+
+	// Validate tile bounds
+	if (
+		tileRow < 0 ||
+		tileRow >= map.length ||
+		tileCol < 0 ||
+		tileCol >= map[0].length
+	)
+		return;
+
+	// Don't pathfind into solid tiles
+	if (!isWalkable(tileCol, tileRow)) {
+		if (!movementHintShown) {
+			showNotification("❌ Can't walk there – find wings to fly!");
+			movementHintShown = true;
+		} else {
+			showNotification("❌ Blocked");
+		}
+		return;
+	}
+
+	const startCol = Math.floor((player.x + player.width / 2) / TILE_SIZE);
+	const startRow = Math.floor((player.y + player.height / 2) / TILE_SIZE);
+
+	// Tapped own tile — nothing to do
+	if (startCol === tileCol && startRow === tileRow) return;
+
+	const path = findPath(startCol, startRow, tileCol, tileRow);
+
+	if (path && path.length > 0) {
+		// Convert path tiles to world coordinates (centre of each tile, adjusted for player size)
+		pathQueue = path.map((step) => ({
+			x: step.col * TILE_SIZE + (TILE_SIZE - player.width) / 2,
+			y: step.row * TILE_SIZE + (TILE_SIZE - player.height) / 2,
+		}));
+		clickedTile = { col: tileCol, row: tileRow };
+		isMovingToTarget = true;
+		if (!movementHintShown) {
+			showNotification("🦶 Tap any tile – I'll walk there!");
+			movementHintShown = true;
+		}
+	} else {
+		showNotification("🚫 No path found");
+		clickedTile = null;
+	}
+}
+
+// Attach event listeners
+canvas.addEventListener("touchstart", handleCanvasTap, { passive: false });
+canvas.addEventListener("mousedown", handleCanvasTap);
 
 // ─── START ───────────────────────────────────────────────────
 gameLoop();

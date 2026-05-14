@@ -1,22 +1,22 @@
 // ─── PROLOGUE / INTRO SCREENS ───────────────────────────────────
 const STORY_INTRO_LINES = [
 	// Screen 1
-	"There is a certain kind of lost\nthat has no map.",
+	"There is a kind of lost\nthat no map can fix.\nThe kind that lives inside you.",
 
 	// Screen 2
-	"Not lost in a place.\nLost in yourself.\nThe kind where you stop recognizing\nthe face in the mirror.",
+	"Not lost in a place.\nLost in yourself.\nWhere your own reflection\nfeels like a stranger.",
 
 	// Screen 3
-	"And then she walked back into his life.\nNot loudly. Not with fanfare.\nThe way light comes through a curtain.",
+	"Then she came.\nNot loud.\nNot with noise.\nJust like sunlight\nslips through a curtain.",
 
 	// Screen 4
-	"She saw him.\nNot who he was pretending to be.\nThe real one.\nThe one he'd almost forgotten existed.",
+	"She saw him.\nThe real him.\nThe one he had almost forgotten\nexisted.",
 
 	// Screen 5 — the map clue reveal
-	"He left a letter.\nInside it, a map.\nDrawn in faded ink,\nlike a secret he was afraid to keep.",
+	"He left her a letter.\nInside, a map.\nDrawn with a hand that trembled—\na secret too tender to speak,\ntoo precious to burn.",
 
 	// Screen 6 — coordinates with a personal touch
-	"X: 76,  Z: -40\n\nIf you ever loved me...\nfind me.\n\n(She drew a small heart beside it.)",
+	"X: 76,  Z: -40\n\nWhen you're ready…\ncome find me.\n\n(She drew a tiny heart beside it.)",
 
 	// Screen 7 — prompt
 	"[ tap or press any key\nto set sail ]",

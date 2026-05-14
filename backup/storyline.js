@@ -13,54 +13,42 @@ const STORY_INTRO_LINES = [
 	"She saw him.\nNot who he was pretending to be.\nThe real one.\nThe one he'd almost forgotten existed.",
 
 	// Screen 5 — the map clue reveal
-	"She left a letter.\nAnd inside it — a map.",
+	"He left a letter.\nInside it, a map.\nDrawn in faded ink,\nlike a secret he was afraid to keep.",
 
-	// Screen 6 — coordinates
-	"X: 150,  Z: -300\n\nIf you ever loved me...\nfind me.",
+	// Screen 6 — coordinates with a personal touch
+	"X: 76,  Z: -40\n\nIf you ever loved me...\nfind me.\n\n(She drew a small heart beside it.)",
 
 	// Screen 7 — prompt
 	"[ tap or press any key\nto set sail ]",
 ];
 
 // ── MEMORY FRAGMENT LOCATIONS ────────────────────────────────────────────────
-//
-//  The new map layout (70 rows × 90 cols, TILE_SIZE = 32):
-//
-//  Fragment 1 — Southern ruins near beach (row 56, col 44)
-//               First memory the player is likely to find, in the south ruins.
-//
-//  Fragment 2 — Mid-forest clearing near river south bank (row 35, col 20)
-//               Hidden in the overgrown western forest corridor.
-//
-//  Fragment 3 — Forest path midpoint, east corridor (row 44, col 55)
-//               Deep in the forest belly, just before the ruins outpost.
-//
-//  Fragment 4 — North ruins courtyard, just south of island (row 13, col 44)
-//               The last memory, very close to her island.
-//
-// ────────────────────────────────────────────────────────────────────────────
+// (same coordinates and labels — only the 'lines' arrays changed)
 
 const STORY_MEMORIES = [
-	// ── Fragment 1 · South ruins (row 56, col 44) ────────────
+	// ── Fragment 1 · South ruins path (row 52, col 30) ────────────
 	{
 		label: "Fragment 1 — The Ruined Shore",
-		worldX: 44 * 32 + 16,
-		worldY: 56 * 32 + 16,
+		worldX: 30 * 32 + 16,
+		worldY: 52 * 32 + 16,
+
 		lines: [
 			"I still remember the first time",
 			"I noticed you.",
-			"We were young.",
+			"We were young,",
+			"when young still meant everything.",
 			"You were looking at the water",
-			"like it owed you something.",
+			"like the sea had stolen from you.",
 			"I couldn't look away.",
 		],
 	},
 
-	// ── Fragment 2 · River south bank, west forest (row 35, col 20) ──
+	// ── Fragment 2 · West forest path (row 36, col 18) ──
 	{
 		label: "Fragment 2 — The Overgrown Path",
-		worldX: 20 * 32 + 16,
-		worldY: 35 * 32 + 16,
+		worldX: 18 * 32 + 16,
+		worldY: 36 * 32 + 16,
+
 		lines: [
 			"There were afternoons",
 			"we didn't say anything at all.",
@@ -70,25 +58,32 @@ const STORY_MEMORIES = [
 		],
 	},
 
-	// ── Fragment 3 · Deep forest east path (row 44, col 55) ──
+	// ── Fragment 3 · East mid-forest path (row 39, col 50) ──
 	{
 		label: "Fragment 3 — The Dark Trees",
-		worldX: 55 * 32 + 16,
-		worldY: 44 * 32 + 16,
+		worldX: 50 * 32 + 16,
+		worldY: 39 * 32 + 16,
+
 		lines: [
 			"I used to call you at 2am",
 			"just to hear your voice.",
 			"I still do it sometimes.",
-			"I just don't press call anymore.",
+			"These days, I never press call.",
 		],
 	},
 
-	// ── Fragment 4 · North ruins courtyard (row 13, col 44) ──
+	// ── Fragment 4 · North path approach (row 15, col 22) ──
 	{
 		label: "Fragment 4 — The Old Courtyard",
-		worldX: 44 * 32 + 16,
-		worldY: 13 * 32 + 16,
-		lines: ["You're close now.", "I can feel it.", "I always could."],
+		worldX: 22 * 32 + 16,
+		worldY: 15 * 32 + 16,
+
+		lines: [
+			"You're close now.",
+			"I can feel it.",
+			"I always could.",
+			"Don't stop.",
+		],
 	},
 ];
 
@@ -96,29 +91,39 @@ const STORY_MEMORIES = [
 const STORY_WINGS_LINES = [
 	"For when walking isn't fast enough.",
 	"You were always worth running to.",
-	"[ You can now fly! ]",
+	"A warmth unlocks in your chest.\nYou remember how to run.",
 ];
 
 // ─── DESTINATION — NOT ENOUGH MEMORIES ──────────────────────────
 const STORY_COLLECT_FIRST = [
-	"I'm close.",
-	"But I should find her memories first.",
+	"She's near.",
+	"But I need her memories first.",
+	"Without them, I'm still a stranger.",
 ];
 
 // ─── THE LETTER ─────────────────────────────────────────────────
+// (Now a complete, emotional template — see explanation below)
 const STORY_LETTER = `To Hyacinth,
 
-the way I once found you.
+Remember the way I once found you.
+Through the broken map and the salt wind.
+Through the version of yourself you buried.
 
+I've been carrying this letter for longer than I should admit.
+Inside it: all the afternoons we never finished,
+and the 2am calls I never made.
 
-               Always yours,
-                    — iweiwei21 💛`;
+Come find me when you're ready to remember too.
+
+Always yours,
+    — iweiwei21 💛`;
 
 // ─── EPILOGUE — FADE TO BLACK ────────────────────────────────────
 const STORY_EPILOGUE_LINES = [
 	"She found you first.",
 	"You found her back.",
 	"That's the whole story.",
+	"And that was enough.",
 ];
 
 // ─── EXPORT CHECK ────────────────────────────────────────────────

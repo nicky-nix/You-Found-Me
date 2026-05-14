@@ -5,38 +5,67 @@ const audio = {
 	sealCrack: new Audio("assets/audio/sealopen.mp3"),
 	memoryFound: new Audio("assets/audio/memory.mp3"),
 	typeSound: new Audio("assets/audio/typing.mp3"),
+
+	// PERF: Reuse a single AudioContext and OscillatorNode chain instead of
+	// creating a new AudioContext on every click. Android WebView has a hard
+	// limit on concurrent AudioContexts (often 6) and creating/closing them
+	// rapidly causes audio glitches and GC pauses.
+	_clickCtx: null,
+	_clickGain: null,
+
 	click: {
-		currentTime: 0, // Keeps compatibility with your reset code
+		currentTime: 0, // Keeps compatibility with reset code elsewhere
 		play: function () {
 			return new Promise((resolve) => {
 				const AudioCtx = window.AudioContext || window.webkitAudioContext;
 				if (!AudioCtx) return resolve();
 
-				const ctx = new AudioCtx();
-				const osc = ctx.createOscillator();
-				const gain = ctx.createGain();
+				// Reuse existing context
+				if (!audio._clickCtx) {
+					audio._clickCtx = new AudioCtx();
+					audio._clickGain = audio._clickCtx.createGain();
+					audio._clickGain.connect(audio._clickCtx.destination);
+				}
 
-				osc.connect(gain);
-				gain.connect(ctx.destination);
+				const ctx = audio._clickCtx;
 
-				// 'sine' is soft, 'square' or 'triangle' feels like an old GameBoy
-				osc.type = "triangle";
+				// Resume suspended context (mobile browsers suspend it when idle)
+				const doPlay = () => {
+					const osc = ctx.createOscillator();
+					osc.connect(audio._clickGain);
 
-				// Start high, slide down fast (creates a crisp "pop/click" sensation)
-				osc.frequency.setValueAtTime(800, ctx.currentTime);
-				osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.05);
+					osc.type = "triangle";
+					osc.frequency.setValueAtTime(800, ctx.currentTime);
+					osc.frequency.exponentialRampToValueAtTime(
+						200,
+						ctx.currentTime + 0.05,
+					);
 
-				// Quick fade out so it doesn't ring
-				gain.gain.setValueAtTime(0.2, ctx.currentTime);
-				gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+					audio._clickGain.gain.setValueAtTime(0.2, ctx.currentTime);
+					audio._clickGain.gain.exponentialRampToValueAtTime(
+						0.01,
+						ctx.currentTime + 0.05,
+					);
 
-				osc.start();
-				osc.stop(ctx.currentTime + 0.06);
-				resolve();
+					osc.start();
+					osc.stop(ctx.currentTime + 0.06);
+
+					// PERF: Disconnect the oscillator after it finishes so it can be GC'd
+					osc.onended = () => osc.disconnect();
+
+					resolve();
+				};
+
+				if (ctx.state === "suspended") {
+					ctx.resume().then(doPlay).catch(resolve);
+				} else {
+					doPlay();
+				}
 			});
 		},
 	},
 };
+
 audio.explore.loop = true;
 audio.explore.volume = 0.4;
 audio.reveal.loop = true;
@@ -49,6 +78,20 @@ if (audio.typeSound) {
 	audio.typeSound.loop = true;
 	audio.typeSound.volume = 0.3;
 }
+
+// PERF: Preload audio files so Android doesn't stall on first play
+// (Android WebView often has a "first play" spike of 200-400ms)
+[
+	audio.explore,
+	audio.reveal,
+	audio.sealCrack,
+	audio.memoryFound,
+	audio.typeSound,
+].forEach((a) => {
+	a.preload = "auto";
+	// Load a silent portion to prime the decoder
+	a.load();
+});
 
 // --- FIXED AUDIO UNLOCK FOR MOBILE ---
 let musicStarted = false;
@@ -64,12 +107,11 @@ window.addEventListener("pointerdown", startMusic, { once: true });
 window.addEventListener("keydown", startMusic, { once: true });
 
 function switchToRevealMusic() {
-	const fadeDuration = 2500; // Match the 2.5 second delay in startRevealSequence
-	const fadeInterval = 50; // Update volume every 50ms
+	const fadeDuration = 2500;
+	const fadeInterval = 50;
 	const steps = fadeDuration / fadeInterval;
 	const volumeStep = 1 / steps;
 
-	// 1. Prepare the reveal music silently in the background
 	audio.reveal.volume = 0;
 	audio.reveal.play().catch((err) => console.log("Reveal music blocked:", err));
 
@@ -78,26 +120,22 @@ function switchToRevealMusic() {
 	const crossfade = setInterval(() => {
 		currentStep++;
 
-		// ─── FADE OUT EXPLORE ───
 		if (audio.explore && !audio.explore.paused) {
 			audio.explore.volume = Math.max(0, audio.explore.volume - volumeStep);
 		}
 
-		// ─── FADE IN REVEAL ───
 		if (audio.reveal) {
 			audio.reveal.volume = Math.min(1, audio.reveal.volume + volumeStep);
 		}
 
-		// ─── CLEANUP WHEN FADE IS DONE ───
 		if (currentStep >= steps) {
 			clearInterval(crossfade);
 
 			if (audio.explore) {
 				audio.explore.pause();
-				audio.explore.currentTime = 0; // Reset track position
+				audio.explore.currentTime = 0;
 			}
 
-			// Lock target volumes perfectly
 			audio.reveal.volume = 1;
 		}
 	}, fadeInterval);
