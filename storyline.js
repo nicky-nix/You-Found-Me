@@ -130,6 +130,7 @@ can i get a kissess poooooooo???
 ill give u the dev logishh.. po soon manghulam sakog iphone ni nash pang pic BHWABHWABHBWHA
 
 thats probably all for now adi muhehe.....
+timecheck toud muhehe its 9:04
 
 stay abit longer po...
 ull understand soon po what i mean muheheh
