@@ -1,5 +1,12 @@
 // ─── PROLOGUE / INTRO SCREENS ───────────────────────────────────
 const STORY_INTRO_LINES = [
+	// Screen -1
+	"Surpriseeeee this is what i have been making po\n it's a game po muehhe",
+	// Screen 0
+	"By the end of this game\n i hope ma enjoy nimo po muhehe",
+
+	"Ahem ahem\n Narrator mode muna mueheheh",
+
 	// Screen 1
 	"There is a kind of lost\nthat no map can fix.\nThe kind that lives inside you.",
 
@@ -16,7 +23,7 @@ const STORY_INTRO_LINES = [
 	"He left her a letter.\nInside, a map.\nDrawn with a hand that trembled—\na secret too tender to speak,\ntoo precious to burn.",
 
 	// Screen 6 — coordinates with a personal touch
-	"X: 76,  Z: -40\n\nWhen you're ready…\ncome find me.\n\n(She drew a tiny heart beside it.)",
+	"X: 76,  Z: -40 (Write this down)\n\nWhen you're ready…\ncome find me.\n\n(She drew a tiny heart beside it.)",
 
 	// Screen 7 — prompt
 	"[ tap or press any key\nto set sail ]",
@@ -26,36 +33,23 @@ const STORY_INTRO_LINES = [
 // (same coordinates and labels — only the 'lines' arrays changed)
 
 const STORY_MEMORIES = [
-	// ── Fragment 1 · South ruins path (row 52, col 30) ────────────
+	// ── Fragment 1 · (row 52, col 30) ────────────
 	{
 		label: "Fragment 1 — The Ruined Shore",
 		worldX: 30 * 32 + 16,
 		worldY: 52 * 32 + 16,
 
-		lines: [
-			"I still remember the first time",
-			"I noticed you.",
-			"We were young,",
-			"when young still meant everything.",
-			"You were looking at the water",
-			"like the sea had stolen from you.",
-			"I couldn't look away.",
-		],
+		lines: ["Hey, it's me.", "It's been a while, hasn't it?"],
 	},
 
-	// ── Fragment 2 · West forest path (row 36, col 18) ──
+	// ── Fragment 2 · (row 36, col 18) ──
 	{
 		label: "Fragment 2 — The Overgrown Path",
 		worldX: 18 * 32 + 16,
 		worldY: 36 * 32 + 16,
+		displayFrames: 420, // ← custom duration (60fps * 7 = 7 seconds)
 
-		lines: [
-			"There were afternoons",
-			"we didn't say anything at all.",
-			"Just existed in the same space.",
-			"That kind of quiet is rare.",
-			"I've been chasing it ever since.",
-		],
+		lines: ["Do you remember us? We used to call eachother ming2x and doggy"],
 	},
 
 	// ── Fragment 3 · East mid-forest path (row 39, col 50) ──
@@ -63,13 +57,9 @@ const STORY_MEMORIES = [
 		label: "Fragment 3 — The Dark Trees",
 		worldX: 50 * 32 + 16,
 		worldY: 39 * 32 + 16,
+		displayFrames: 420, // ← custom duration (60fps * 7 = 7 seconds)
 
-		lines: [
-			"I used to call you at 2am",
-			"just to hear your voice.",
-			"I still do it sometimes.",
-			"These days, I never press call.",
-		],
+		lines: ["That day… when everything changed. Do you remember?"],
 	},
 
 	// ── Fragment 4 · North path approach (row 15, col 22) ──
@@ -77,21 +67,14 @@ const STORY_MEMORIES = [
 		label: "Fragment 4 — The Old Courtyard",
 		worldX: 22 * 32 + 16,
 		worldY: 15 * 32 + 16,
-
-		lines: [
-			"You're close now.",
-			"I can feel it.",
-			"I always could.",
-			"Don't stop.",
-		],
+		displayFrames: 420, // ← custom duration (60fps * 7 = 7 seconds)
+		lines: ["I know you'll find me eventually."],
 	},
 ];
 
 // ─── WINGS PICKUP ───────────────────────────────────────────────
 const STORY_WINGS_LINES = [
-	"For when walking isn't fast enough.",
-	"You were always worth running to.",
-	"A warmth unlocks in your chest.\nYou remember how to run.",
+	"A warmth unlocks in your chest.\nYou remember how to fly.",
 ];
 
 // ─── DESTINATION — NOT ENOUGH MEMORIES ──────────────────────────
@@ -103,17 +86,58 @@ const STORY_COLLECT_FIRST = [
 
 // ─── THE LETTER ─────────────────────────────────────────────────
 // (Now a complete, emotional template — see explanation below)
-const STORY_LETTER = `To Hyacinth,
+const STORY_LETTER = `To my wifey (Hyacinth Laranjo Baguio) hehe,
 
-Remember the way I once found you.
-Through the broken map and the salt wind.
-Through the version of yourself you buried.
+Happy 17th Monthsary to us! 🎉
 
-I've been carrying this letter for longer than I should admit.
-Inside it: all the afternoons we never finished,
-and the 2am calls I never made.
+I am writing this letter at 8:30 pm BHWABHWABHWAHB
+by the end of this letter I shall announce what time I finished it BWAHBHWBHW
 
-Come find me when you're ready to remember too.
+Adi, wifey, ming2x, and all the cs we had, I just want to say thank you for being 
+there for me, You Found Me po, I'm truly thankful for you.
+I couldn't ask for more unless it's huggiess kissess and lambings;>> muhehehe
+I WANTTT MOREEEE muhehe
+
+And ofc if there's thank you there's im sorry
+im sorry po my wifey for how I acted sometimes
+im really sorry, ur husbanto is working hard to improve
+im working hard cause i loveupoo 
+
+toud adi advance happy 18th bday po muhehehe
+
+muehehehehehehe
+
+MUEHEHHEHEHEHEHEHEHEHEH
+
+*/ahem ahem
+*/clears throat 
+*/leans forward and kisses yaa lipssss AHHHHHHHHHHHHHhh
+
+BHAWBHWABHWAWA
+
+I hope u enjoyed this short game po
+i worked on this game for about 3 days straight
+and i really learned alatttt
+
+originally for our 17th monthsary I planned to make an interactive 
+online letter but i remembered im Dominic and i want to make something
+unique for you, pasikat ako muehhehe
+I always saw online letter on tiktok but i havent seen someone made a 
+game or maybe someone did but not to this extent
+so I decided to make one just for you muehehehe 
+can i get a kissess poooooooo???
+
+ill give u the dev logishh.. po soon manghulam sakog iphone ni nash pang pic BHWABHWABHBWHA
+
+thats probably all for now adi muhehe.....
+
+stay abit longer po...
+ull understand soon po what i mean muheheh
+
+again happy 17th po adi muhehe 
+congrats nato po stay strong to us po
+
+I Love You poo my future wifey 
 
 Always yours,
     — iweiwei21 💛`;

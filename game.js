@@ -899,15 +899,14 @@ function updateMemories() {
 		const dx = player.x - mem.x;
 		const dy = player.y - mem.y;
 		if (dx * dx + dy * dy < 24 * 24) {
-			// PERF: skip sqrt
 			mem.collected = true;
-
 			audio.memoryFound.currentTime = 0;
 			audio.memoryFound
 				.play()
 				.catch((err) => console.log("Sound blocked:", err));
 
-			queueMessage(mem.text);
+			const customDuration = mem.displayFrames || null;
+			queueMessage(mem.text, customDuration);
 
 			if (areAllMemoriesCollected()) {
 				queueMessage([
@@ -927,11 +926,11 @@ function updateMemories() {
 	}
 }
 
-function queueMessage(messageData) {
+function queueMessage(messageData, customDuration = null) {
 	if (typeof messageData === "string") {
-		memoryQueue.push([messageData]);
+		memoryQueue.push({ lines: [messageData], duration: customDuration });
 	} else if (Array.isArray(messageData)) {
-		memoryQueue.push(messageData);
+		memoryQueue.push({ lines: messageData, duration: customDuration });
 	}
 	processNextMemory();
 }
@@ -939,8 +938,9 @@ function queueMessage(messageData) {
 function processNextMemory() {
 	if (isDisplayingMemory || memoryQueue.length === 0) return;
 	isDisplayingMemory = true;
-	activeMemory = memoryQueue.shift();
-	memoryTimer = 240;
+	const item = memoryQueue.shift();
+	activeMemory = item.lines;
+	memoryTimer = item.duration !== null ? item.duration : 240; // ← custom duration
 }
 
 // PERF: Cache the glow radius value so sin isn't called both in update and draw
@@ -1250,7 +1250,24 @@ function showLetter() {
 
 function typewriterEffect(text) {
 	const el = document.getElementById("letter-text");
+	const parchment = document.getElementById("parchment");
+	if (!el || !parchment) return;
+
 	let i = 0;
+	let shouldAutoScroll = true; // ← flag to track if we may auto-scroll
+
+	// Listen for manual scroll – disable auto‑scroll if user scrolls up
+	function onScroll() {
+		if (!shouldAutoScroll) return;
+		const isNearBottom =
+			parchment.scrollTop + parchment.clientHeight >=
+			parchment.scrollHeight - 20;
+		if (!isNearBottom) {
+			shouldAutoScroll = false;
+			parchment.removeEventListener("scroll", onScroll);
+		}
+	}
+	parchment.addEventListener("scroll", onScroll);
 
 	if (typeof audio !== "undefined" && audio.typeSound) {
 		audio.typeSound.currentTime = 0;
@@ -1259,21 +1276,22 @@ function typewriterEffect(text) {
 			.catch((err) => console.log("Audio play blocked:", err));
 	}
 
-	// PERF: Use a single timeout chain instead of setInterval for typewriter.
-	// setInterval accumulates drift on throttled Android background tabs;
-	// setTimeout scheduling is more reliable for the letter reveal.
 	function typeNext() {
 		if (i < text.length) {
 			el.textContent += text[i];
-			const parchment = document.getElementById("parchment");
-			if (parchment) parchment.scrollTop = parchment.scrollHeight;
+			// Only auto‑scroll if still allowed
+			if (shouldAutoScroll) {
+				parchment.scrollTop = parchment.scrollHeight;
+			}
 			i++;
-			setTimeout(typeNext, 28);
+			setTimeout(typeNext, 35);
 		} else {
+			// Typing finished – clean up and show buttons
 			if (typeof audio !== "undefined" && audio.typeSound) {
 				audio.typeSound.pause();
 				audio.typeSound.currentTime = 0;
 			}
+			parchment.removeEventListener("scroll", onScroll);
 			const btns = document.getElementById("letter-buttons");
 			if (btns) btns.style.opacity = "1";
 			spawnConfetti();
@@ -1331,20 +1349,14 @@ function backToIsland() {
 
 	islandReturnTimeout = setTimeout(() => {
 		if (gameState === "exploring") {
-			showCenteredNotification(
-				"✨ A strange energy lingers… Part Two is calling.",
-				7000,
-			);
+			showCenteredNotification("✨ Yieeeeeeee, p2 is coming po", 7000);
 		}
 		islandReturnTimeout = null;
 	}, 10000);
 
 	islandReturnSecondTimeout = setTimeout(() => {
 		if (gameState === "exploring") {
-			showCenteredNotification(
-				"💌 The waves whisper a secret… your journey is far from over.",
-				7000,
-			);
+			showCenteredNotification("💌Coming soon this June 27 hopefully", 7000);
 		}
 		islandReturnSecondTimeout = null;
 	}, 15000);
