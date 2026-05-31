@@ -33,7 +33,7 @@
 
       lockDiv.innerHTML = [
         '<div style="font-size:3rem;margin-bottom:16px">🔒</div>',
-        '<h2 style="color:#ffd700;font-size:0.85rem;margin-bottom:12px">Not yet, love...</h2>',
+        '<h2 style="color:#ffd700;font-size:0.85rem;margin-bottom:12px">Not yet, po wifey...</h2>',
         '<p style="color:#aaa;font-size:0.55rem;margin-bottom:8px">Opens on</p>',
         '<p style="color:#ff69b4;font-size:0.65rem;margin-bottom:20px">June 1, 2026 &bull; 1:00 AM PHT</p>',
         '<p id="lock-countdown" style="color:#ff69b4;font-size:0.9rem;letter-spacing:2px"></p>'
