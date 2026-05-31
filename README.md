@@ -27,38 +27,6 @@ This project is a thoughtfully crafted gift experience designed to celebrate spe
 - A modern web browser
 - Basic knowledge of HTML, CSS, and JavaScript (for contributions)
 
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/nicky-nix/You-Found-Me.git
-```
-
-2. Navigate to the project directory:
-```bash
-cd You-Found-Me
-```
-
-3. Open the project in your browser:
-```bash
-# Simply open index.html in your preferred web browser
-open index.html
-```
-
-## Usage
-
-Open the project in any modern web browser to experience the interactive gift. The interface will guide you through the experience.
-
-## Contributing
-
-Contributions are welcome! If you'd like to improve this project:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
 ## License
 
 This project is personal and shared with love. Feel free to use and modify as needed.
