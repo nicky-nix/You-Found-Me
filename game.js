@@ -1,3 +1,72 @@
+// ─── DATE LOCK ───────────────────────────────────────────────
+(function () {
+  const unlockDate = new Date("2026-06-01T01:00:00+08:00");
+  if (new Date() < unlockDate) {
+
+    function showLockScreen() {
+      document.body.style.margin = "0";
+      document.body.style.background = "#0a0a0a";
+      document.body.style.overflow = "hidden";
+
+      // Hide all existing body children
+      Array.from(document.body.children).forEach(function(el) {
+        el.style.display = "none";
+      });
+
+      var lockDiv = document.createElement("div");
+      lockDiv.style.cssText = [
+        "display:flex",
+        "flex-direction:column",
+        "align-items:center",
+        "justify-content:center",
+        "height:100vh",
+        "background:#0a0a0a",
+        "color:#fff",
+        "font-family:'Press Start 2P',serif",
+        "text-align:center",
+        "padding:20px",
+        "position:fixed",
+        "top:0","left:0","right:0","bottom:0",
+        "z-index:99999",
+        "box-sizing:border-box"
+      ].join(";");
+
+      lockDiv.innerHTML = [
+        '<div style="font-size:3rem;margin-bottom:16px">🔒</div>',
+        '<h2 style="color:#ffd700;font-size:0.85rem;margin-bottom:12px">Not yet, love...</h2>',
+        '<p style="color:#aaa;font-size:0.55rem;margin-bottom:8px">Opens on</p>',
+        '<p style="color:#ff69b4;font-size:0.65rem;margin-bottom:20px">June 1, 2026 &bull; 1:00 AM PHT</p>',
+        '<p id="lock-countdown" style="color:#ff69b4;font-size:0.9rem;letter-spacing:2px"></p>'
+      ].join("");
+
+      document.body.appendChild(lockDiv);
+
+      var target = new Date("2026-06-01T01:00:00+08:00");
+      function tick() {
+        var diff = target - new Date();
+        if (diff <= 0) { location.reload(); return; }
+        var h = Math.floor(diff / 3600000);
+        var m = Math.floor((diff % 3600000) / 60000);
+        var s = Math.floor((diff % 60000) / 1000);
+        var el = document.getElementById("lock-countdown");
+        if (el) el.textContent = h + "h " + m + "m " + s + "s ⏳";
+      }
+      tick();
+      setInterval(tick, 1000);
+    }
+
+    // Works whether DOM is ready or not
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", showLockScreen);
+    } else {
+      showLockScreen();
+    }
+
+    throw new Error("Game locked until June 1 2026 1AM PHT.");
+  }
+})();
+// ─────────────────────────────────────────────────────────────
+
 // ─── CANVAS SETUP ───────────────────────────────────────────
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d", { alpha: false }); // PERF: opaque canvas skips alpha compositing

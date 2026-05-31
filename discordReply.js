@@ -65,13 +65,11 @@ function sendReplyToDiscord(authorName, replyMessage) {
 
 	const payload = {
 		username: "Bocchi Sending Business",
-		avatar_url: "5076792db62d923e4e83a68a264d9665-907340373.jpg",
 		embeds: [
 			{
 				description: `> 💖 **From Your Wifey:** \`${authorName}\`\n> ⏳ **Time:** <t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)\n\n🌸 ───────────────────────────── 🌸`,
 				title: `\n${replyMessage}\n`,
 				color: 16738740,
-				thumbnail: { url: "https://i.imgur.com/vHco7O6.png" },
 				footer: {
 					text: "Always Yours • You Found Me Engine",
 	
