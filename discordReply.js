@@ -61,7 +61,7 @@ function sendReplyToDiscord(authorName, replyMessage) {
 	replyBtn.disabled = true;
 
 	const discordWebhookUrl =
-		"https://discord.com/api/webhooks/1503654821704630332/npab-qTmGPzCNq9Hvy5RmOrZwQkQezsportS75r5yy2oNsK6l0JGgHrlbLhdXvuP-C-9";
+		"https://discordapp.com/api/webhooks/1510624286203838715/98fBySFXbtd4s5hTm93btznuF6cb57meMU4VlTNcf5UN_Ku5jO_isrPU7FxnpbmVChVB";
 
 	const payload = {
 		username: "Birb Delivery Island Service",

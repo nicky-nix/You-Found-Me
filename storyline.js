@@ -127,7 +127,6 @@ game or maybe someone did but not to this extent
 so I decided to make one just for you muehehehe 
 can i get a kissess poooooooo???
 
-ill give u the dev logishh.. po soon manghulam sakog iphone ni nash pang pic BHWABHWABHBWHA
 
 thats probably all for now adi muhehe.....
 timecheck toud muhehe its 9:04
