@@ -64,8 +64,8 @@ function sendReplyToDiscord(authorName, replyMessage) {
 		"https://discordapp.com/api/webhooks/1510624286203838715/98fBySFXbtd4s5hTm93btznuF6cb57meMU4VlTNcf5UN_Ku5jO_isrPU7FxnpbmVChVB";
 
 	const payload = {
-		username: "Birb Delivery Island Service",
-		avatar_url: "https://i.imgur.com/vHco7O6.png",
+		username: "Bocchi Sending Business",
+		avatar_url: "5076792db62d923e4e83a68a264d9665-907340373.jpg",
 		embeds: [
 			{
 				description: `> 💖 **From Your Wifey:** \`${authorName}\`\n> ⏳ **Time:** <t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)\n\n🌸 ───────────────────────────── 🌸`,
@@ -74,7 +74,7 @@ function sendReplyToDiscord(authorName, replyMessage) {
 				thumbnail: { url: "https://i.imgur.com/vHco7O6.png" },
 				footer: {
 					text: "Always Yours • You Found Me Engine",
-					icon_url: "https://i.imgur.com/vHco7O6.png",
+	
 				},
 			},
 		],

@@ -109,7 +109,7 @@ function _doResize() {
 	const baselineH = 720;
 	const scaleX = W / baselineW;
 	const scaleY = H / baselineH;
-	renderScale = Math.max(0.65, Math.min(1.35, Math.min(scaleX, scaleY)));
+	renderScale = Math.max(1.0, Math.min(1.6, Math.min(scaleX, scaleY)));
 
 	// PERF: Cap DPR to 2 — Android phones often report 3-4, which triples
 	// fill-rate for zero visual benefit on a small screen.
@@ -527,7 +527,7 @@ function drawCanvasNotification() {
 	// Start from below the screen (GAME_H + boxHeight) and end at centre
 	// We'll compute the target centre Y first
 	const isPC = GAME_W >= 700;
-	const fontSize = isPC ? uiPx(12) : uiPx(9);
+	const fontSize = isPC ? uiPx(12) : uiPx(11);
 	const padY = uiPx(14);
 	const boxH = fontSize + padY * 2;
 	const centerY = (GAME_H - boxH) / 2; // final vertical position
@@ -636,8 +636,8 @@ function drawIntro() {
 	ctx.fillRect(0, 0, GAME_W, GAME_H);
 
 	const isPC = GAME_W >= 700;
-	const fontPx = isPC ? uiPx(20) : uiPx(11);
-	const lineStep = isPC ? uiPx(44) : uiPx(24);
+	const fontPx = isPC ? uiPx(20) : uiPx(16);
+	const lineStep = isPC ? uiPx(44) : uiPx(32);
 
 	ctx.font = `${fontPx}px "Press Start 2P"`;
 	ctx.textAlign = "center";
@@ -970,8 +970,8 @@ function drawMemoryPopup() {
 	const alpha = Math.min(1, memoryTimer / 40);
 	const rawLines = activeMemory;
 
-	const fontSize = isPC ? uiPx(16) : uiPx(9);
-	const lineH = isPC ? uiPx(30) : uiPx(20);
+	const fontSize = isPC ? uiPx(16) : uiPx(13);
+	const lineH = isPC ? uiPx(30) : uiPx(26);
 	const padX = isPC ? uiPx(40) : uiPx(20);
 	const padY = isPC ? uiPx(25) : uiPx(12);
 	const textYOffset = isPC ? uiPx(22) : uiPx(12);
@@ -1356,7 +1356,7 @@ function backToIsland() {
 
 	islandReturnSecondTimeout = setTimeout(() => {
 		if (gameState === "exploring") {
-			showCenteredNotification("💌Coming soon this June 27 hopefully", 7000);
+			showCenteredNotification("💌 Coming soon this June 27 hopefully", 7000);
 		}
 		islandReturnSecondTimeout = null;
 	}, 15000);
