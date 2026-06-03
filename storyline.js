@@ -88,7 +88,7 @@ const STORY_COLLECT_FIRST = [
 // (Now a complete, emotional template — see explanation below)
 const STORY_LETTER = `To my wifey (Hyacinth Laranjo Baguio) hehe,
 
-Happy 17th Monthsary to us! 🎉
+Happy 18th Monthsary to us! 🎉
 
 I am writing this letter at 8:30 pm BHWABHWABHWAHB
 by the end of this letter I shall announce what time I finished it BWAHBHWBHW
@@ -119,7 +119,7 @@ I hope u enjoyed this short game po
 i worked on this game for about 3 days straight
 and i really learned alatttt
 
-originally for our 17th monthsary I planned to make an interactive 
+originally for our 18th monthsary I planned to make an interactive 
 online letter but i remembered im Dominic and i want to make something
 unique for you, pasikat ako muehhehe
 I always saw online letter on tiktok but i havent seen someone made a 
@@ -134,7 +134,7 @@ timecheck toud muhehe its 9:04
 stay abit longer po...
 ull understand soon po what i mean muheheh
 
-again happy 17th po adi muhehe 
+again happy 18th po adi muhehe 
 congrats nato po stay strong to us po
 
 I Love You poo my future wifey 
